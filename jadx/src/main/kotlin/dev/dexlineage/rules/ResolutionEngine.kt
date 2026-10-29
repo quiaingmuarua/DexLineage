@@ -3,6 +3,8 @@ package dev.dexlineage.rules
 import dev.dexlineage.io.*
 import dev.dexlineage.knowledge.RuleProofs
 import dev.dexlineage.model.*
+import dev.dexlineage.apk.ApkReader
+import dev.dexlineage.rules.facts.DexFactSession
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
@@ -18,20 +20,45 @@ object ResolutionEngine {
 
     fun buildId(): String = implementationId
 
-    fun execute(artifact: Artifact, rules: List<RuleRevision>, workDir: Path): ResolutionBatch {
+    fun execute(artifact: Artifact, rules: List<RuleRevision>, workDir: Path): ResolutionBatch = execute(artifact, rules, workDir, emptyMap())
+
+    fun execute(artifact: Artifact, rules: List<RuleRevision>, workDir: Path, anchors: Map<String, SupportAnchor>): ResolutionBatch {
         val revisions = normalizedRules(rules)
         val engineBuildId = buildId()
-        // A single query scans the union of literal anchors, then loads structural owners in a batch.
-        // An empty revision list still scans the class inventory and detects incomplete input.
-        val query = RuleEngine.query(artifact, revisions.flatMap { it.locators }, workDir)
-        val resolutions = resolveQuery(artifact, revisions, engineBuildId, query)
-        return ResolutionBatch(resolutions, query.scan, query.analysis)
+        val waiting = revisions.mapNotNull { rule -> rule.requires.values.filter { it !in anchors }.distinct().sorted().takeIf { it.isNotEmpty() }?.let { rule.revisionId to it } }.toMap()
+        val ready = revisions.filter { it.revisionId !in waiting }
+        val dependencies = ready.associate { it.revisionId to StrategyRegistry.checkDependencies(it, artifact, anchors) }
+        if (ready.all { it.strategyId == "builtin.locators" }) {
+            val query = RuleEngine.query(artifact, ready.flatMap { it.locators }, workDir)
+            return ResolutionBatch(resolveQuery(artifact, ready, engineBuildId, query), query.scan, query.analysis, waiting)
+        }
+        val builtin = ready.filter { it.strategyId == "builtin.locators" }
+        val custom = ready.filter { it.strategyId != "builtin.locators" }
+        val facts = linkedMapOf<String, List<MatchFact>>()
+        lateinit var builtinQuery: QueryResult
+        DexFactSession(artifact, ready.flatMap { StrategyRegistry.literals(it) }.toSet(), dependencies.values.flatMap { it.values }.mapNotNull { it.binding.method }.toSet()).use { session ->
+            dependencies.values.flatMap { it.values }.distinctBy { it.key }.forEach { anchor ->
+                requireInput(session.classes[anchor.binding.owner.descriptor]?.ref == anchor.binding.owner, "Anchor class/DEX identity absent from APK")
+                anchor.binding.method?.let { requireInput(session.method(it) != null, "Anchor method absent from APK") }
+            }
+            builtinQuery = RuleEngine.queryWithScan(artifact, builtin.flatMap { it.locators }, workDir, session.scan)
+            custom.forEach { rule -> facts[rule.revisionId] = StrategyRegistry.execute(session, rule, dependencies.getValue(rule.revisionId)) }
+        }
+        val resolutions = resolveQuery(artifact, builtin, engineBuildId, builtinQuery).toMutableMap()
+        custom.forEach { rule -> resolutions[rule.revisionId] = RuleProofs.create(artifact.sha256, rule, engineBuildId, facts.getValue(rule.revisionId), dependencies.getValue(rule.revisionId)).also(RuleProofs::validate) }
+        val already = builtinQuery.analysis?.code.orEmpty()
+        val evidenceOwners = facts.values.flatten().filter { it.status != MatchStatus.FAIL }.flatMap { listOf(it.owner) + it.relatedRefs + it.trace.map { trace -> trace.owner } }.map { it.descriptor }.toSet()
+        val extra = ApkReader.decompile(Path.of(artifact.path), evidenceOwners - already.map { it.descriptor }.toSet(), workDir.resolve("strategy-evidence"))
+        val analysis = FieldAnalysis(builtinQuery.analysis?.bindings.orEmpty(), (already + extra).distinctBy { it.descriptor },
+            builtinQuery.analysis?.diagnostics.orEmpty(), (builtinQuery.analysis?.elapsedMillis ?: 0) + extra.sumOf { it.elapsedMillis }, builtinQuery.analysis?.unavailableOwners.orEmpty())
+        Digests.verify(artifact)
+        return ResolutionBatch(resolutions.toSortedMap(), builtinQuery.scan, analysis, waiting)
     }
 
     internal fun normalizedRules(rules: List<RuleRevision>): List<RuleRevision> {
         rules.forEach { rule ->
             RuleProofs.validate(rule)
-            rule.locators.forEach(RuleEngine::validate)
+            StrategyRegistry.validate(rule)
         }
         return rules.distinctBy { it.revisionId }.sortedBy { it.revisionId }
     }

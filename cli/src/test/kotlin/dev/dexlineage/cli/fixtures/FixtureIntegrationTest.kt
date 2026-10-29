@@ -42,10 +42,10 @@ class FixtureIntegrationTest {
             val dir = output.resolve("all-$version")
             val run = prepareAnalysis(version, definitions, dir)
             assertEquals(manifest.cases.map { it.id }.toSet(), run.tasks.map { it.taskId }.toSet())
-            run.tasks.forEach { task -> assertResolution(task.resolution, scenario(task.taskId), version) }
-            val unknown = run.tasks.single { it.taskId == "unknownCompetitor" }.resolution
+            run.tasks.forEach { task -> assertResolution(task.resolution!!, scenario(task.taskId), version) }
+            val unknown = run.tasks.single { it.taskId == "unknownCompetitor" }.resolution!!
             assertEquals(setOf(MatchStatus.PASS, MatchStatus.UNKNOWN), unknown.candidates.map { it.status }.toSet())
-            results["$version-all-rules"] = run.tasks.associate { it.taskId to it.resolution.status }
+            results["$version-all-rules"] = run.tasks.associate { it.taskId to it.resolution!!.status }
             if (version == "v1") verifyUnknownAndMissingEvidence(dir, run)
             val empty = publish("analysis", dir, output.resolve("all-$version-unreviewed"))
             assertTrue(empty.entries.isEmpty(), "A UNIQUE match without review must not publish")
@@ -60,33 +60,33 @@ class FixtureIntegrationTest {
         assertEquals(expectedOwners, discovery.leads.map { it.owner.descriptor }.toSet(), "Scope discovery uses real structure")
         val sourceDir = output.resolve("analysis-source")
         val sourceRun = prepareAnalysis("v1", discoverDir.resolve("rules.json"), sourceDir)
-        sourceRun.tasks.forEach { assertResolution(it.resolution, caseFor(it), "v1") }
+        sourceRun.tasks.forEach { assertResolution(it.resolution!!, caseFor(it), "v1") }
         // The external-scope owner must be present even though it was not a discovery lead.
         val collision = sourceRun.tasks.single { caseFor(it).id == "outsideScopeCollision" }
-        assertEquals(2, collision.resolution.candidates.size)
+        assertEquals(2, collision.resolution!!.candidates.size)
         assertEquals(1, scenario("outsideScopeCollision").versions.getValue("v1").discoveryOwners.size)
 
         val sourceEvidence = inspectAnalysis(sourceDir, sourceRun)
-        val sourceReviews = sourceRun.tasks.filter { it.resolution.status == ResolutionStatus.UNIQUE }
+        val sourceReviews = sourceRun.tasks.filter { it.resolution!!.status == ResolutionStatus.UNIQUE }
             .map { analysisReview(sourceRun, it, sourceEvidence, "v1", caseFor(it).semanticAlias) }
         assertEquals(manifest.cases.filter { it.versions.getValue("v1").resolution == "UNIQUE" }.map { it.semanticAlias }.toSet(),
             sourceReviews.map { it.name }.toSet())
         val before = analysisPage(sourceDir)
         assertEquals(sourceRun.tasks.size, before.total)
-        assertTrue(before.items.all { it.state == if (it.task.resolution.status == ResolutionStatus.UNIQUE) TaskState.UNREVIEWED else TaskState.INVALID })
+        assertTrue(before.items.all { it.state == if (it.task.resolution!!.status == ResolutionStatus.UNIQUE) TaskState.UNREVIEWED else TaskState.INVALID })
         val invalid = sourceRun.tasks.first { caseFor(it).id == "alwaysAmbiguous" }
-        rejectAnalysis(sourceDir, sourceRun, listOf(AnalysisReview(invalid.taskId, invalid.resolution.resolutionId,
+        rejectAnalysis(sourceDir, sourceRun, listOf(AnalysisReview(invalid.taskId, invalid.resolution!!.resolutionId,
             invalid.rule.revisionId, ReviewAction.ACCEPT, "DifferentAliasCannotChooseAnOwner", Confidence.HIGH,
             "Deliberately invalid: semantic confidence cannot remove the second owner.")), "ambiguous-high-alias")
         rejectAnalysis(sourceDir, sourceRun, listOf(sourceReviews.first().copy(resolutionId = "wrong-resolution")), "wrong-resolution")
         rejectAnalysis(sourceDir, sourceRun, listOf(sourceReviews.first().copy(ruleRevisionId = "wrong-rule")), "wrong-rule")
         val foreign = sourceEvidence.first { record -> record.ref.descriptor == sourceRun.tasks
-            .single { it.taskId == sourceReviews[1].taskId }.resolution.uniqueRef!!.descriptor }
+            .single { it.taskId == sourceReviews[1].taskId }.resolution!!.uniqueRef!!.descriptor }
         rejectAnalysis(sourceDir, sourceRun, listOf(sourceReviews.first().copy(evidenceIds = listOf(foreign.evidenceId))), "foreign-evidence")
         rejectAnalysis(sourceDir, sourceRun, listOf(sourceReviews.first(), sourceReviews[1].copy(resolutionId = "wrong-resolution")), "atomic-invalid-batch")
         val obsolete = cli.gson.toJsonTree(analysisBatch(sourceRun, listOf(sourceReviews.first()))).asJsonObject
         obsolete.getAsJsonArray("items")[0].asJsonObject.addProperty("targetDescriptor", sourceRun.tasks
-            .single { it.taskId == sourceReviews.first().taskId }.resolution.uniqueRef!!.descriptor)
+            .single { it.taskId == sourceReviews.first().taskId }.resolution!!.uniqueRef!!.descriptor)
         val obsoletePath = cli.write("reviews/obsolete-analysis-selection.json", obsolete)
         cli.execute("obsolete-analysis-selection", "analysis", "submit", "--run", sourceDir, "--review", obsoletePath, expectedExit = 2)
         assertEquals(before, analysisPage(sourceDir), "Rejected batch must not partially commit a review")
@@ -118,10 +118,10 @@ class FixtureIntegrationTest {
         val migrationDir = output.resolve("migration")
         val migration = prepareMigration(sourceOut, migrationDir)
         assertEquals(sourceKnowledge.entries.map { it.semanticId }.toSet(), migration.tasks.map { it.entry.semanticId }.toSet())
-        migration.tasks.forEach { assertResolution(it.resolution, caseFor(it), "v2") }
+        migration.tasks.forEach { assertResolution(it.resolution!!, caseFor(it), "v2") }
         assertEquals(sourceKnowledge, migration.knowledge, "The exact published knowledge file is the handoff")
         val migrationEvidence = inspectMigration(migrationDir, migration)
-        val migrationReviews = migration.tasks.filter { it.resolution.status == ResolutionStatus.UNIQUE }
+        val migrationReviews = migration.tasks.filter { it.resolution!!.status == ResolutionStatus.UNIQUE }
             .map { migrationReview(migration, it, migrationEvidence) }
         val absentReview = publish("migration", migrationDir, output.resolve("migration-without-review"))
         assertTrue(absentReview.entries.isEmpty())
@@ -165,7 +165,7 @@ class FixtureIntegrationTest {
 
     private fun verifyUnknownAndMissingEvidence(dir: Path, run: AnalysisRun) {
         val unknown = run.tasks.single { it.taskId == "unknownCompetitor" }
-        rejectAnalysis(dir, run, listOf(AnalysisReview(unknown.taskId, unknown.resolution.resolutionId,
+        rejectAnalysis(dir, run, listOf(AnalysisReview(unknown.taskId, unknown.resolution!!.resolutionId,
             unknown.rule.revisionId, ReviewAction.ACCEPT, "CannotIgnoreUnknownCompetitor", Confidence.HIGH,
             "Deliberately invalid: an unresolved competing entity prevents unique identification.")), "unknown-high-accept")
         val task = run.tasks.single { it.taskId == "publicCache" }
@@ -201,7 +201,7 @@ class FixtureIntegrationTest {
         val orFile = cli.write("inputs/migration-or.json", MigrationRulesFile(items = listOf(
             MigrationRuleOverride(changed.semanticId, changed.locators + specific, changed.ruleRevision!!.revisionId))))
         val orRun = prepareMigration(sourceOut, cli.output.resolve("migration-or"), orFile)
-        assertResolution(orRun.tasks.single { it.entry.semanticId == changed.semanticId }.resolution, scenario("becomesAmbiguous"), "v2")
+        assertResolution(orRun.tasks.single { it.entry.semanticId == changed.semanticId }.resolution!!, scenario("becomesAmbiguous"), "v2")
         val override = cli.write("inputs/migration-replacement.json", MigrationRulesFile(items = listOf(
             MigrationRuleOverride(changed.semanticId, listOf(specific), changed.ruleRevision!!.revisionId))))
         val dir = cli.output.resolve("migration-replacement")
@@ -209,15 +209,15 @@ class FixtureIntegrationTest {
         assertEquals(source.entries.map { it.semanticId }.toSet(), run.tasks.map { it.entry.semanticId }.toSet())
         val task = run.tasks.single { it.entry.semanticId == changed.semanticId }
         val expected = oracles.getValue("v2").descriptor(scenario("becomesAmbiguous").versions.getValue("v1").owners.single())
-        assertEquals(ResolutionStatus.UNIQUE, task.resolution.status)
-        assertEquals(setOf(expected), task.resolution.candidates.map { it.ref.descriptor }.toSet())
-        assertEquals(listOf(specific), task.resolution.rule.locators)
-        assertNotEquals(changed.ruleRevision!!.revisionId, task.resolution.rule.revisionId)
-        run.tasks.filter { it.entry.semanticId != changed.semanticId }.forEach { assertResolution(it.resolution, caseFor(it), "v2") }
+        assertEquals(ResolutionStatus.UNIQUE, task.resolution!!.status)
+        assertEquals(setOf(expected), task.resolution!!.candidates.map { it.ref.descriptor }.toSet())
+        assertEquals(listOf(specific), task.resolution!!.rule.locators)
+        assertNotEquals(changed.ruleRevision!!.revisionId, task.resolution!!.rule.revisionId)
+        run.tasks.filter { it.entry.semanticId != changed.semanticId }.forEach { assertResolution(it.resolution!!, caseFor(it), "v2") }
         val evidence = inspectMigration(dir, run)
-        val reviews = run.tasks.filter { it.resolution.status == ResolutionStatus.UNIQUE }.map { migrationReview(run, it, evidence) }
+        val reviews = run.tasks.filter { it.resolution!!.status == ResolutionStatus.UNIQUE }.map { migrationReview(run, it, evidence) }
         val stale = reviews.single { it.taskId == task.taskId }.copy(resolutionId = original.tasks
-            .single { it.entry.semanticId == changed.semanticId }.resolution.resolutionId)
+            .single { it.entry.semanticId == changed.semanticId }.resolution!!.resolutionId)
         val staleFile = cli.write("reviews/stale-migration-proof.json", migrationBatch(run, listOf(stale)))
         cli.execute("old-resolution-after-rule-replacement", "migration", "submit", "--run", dir, "--review", staleFile, expectedExit = 2)
         val path = cli.write("reviews/replacement.json", migrationBatch(run, reviews))
@@ -240,7 +240,7 @@ class FixtureIntegrationTest {
         val dir = cli.output.resolve("analysis-update")
         val run = prepareAnalysis("v2", rules, dir, baseOut.resolve("knowledge.json"))
         val task = run.tasks.single()
-        assertResolution(task.resolution, scenario("privateCache"), "v2")
+        assertResolution(task.resolution!!, scenario("privateCache"), "v2")
         assertEquals(old.semanticId, task.semanticId, "Current raw identity, rather than an alias, must reuse semanticId")
         val evidence = inspectAnalysis(dir, run)
         val review = analysisReview(run, task, evidence, "v2", "RefinedPrivateCache", scenario("privateCache"))
@@ -262,7 +262,7 @@ class FixtureIntegrationTest {
                 locators = listOf(locator("AbsentFixtureLiteral"))))))
         val failDir = cli.output.resolve("analysis-failed-update")
         val failed = prepareAnalysis("v2", failingRules, failDir, out.resolve("knowledge.json"))
-        assertEquals(ResolutionStatus.NO_MATCH, failed.tasks.single().resolution.status)
+        assertEquals(ResolutionStatus.NO_MATCH, failed.tasks.single().resolution!!.status)
         val failedOut = cli.output.resolve("failed-update-published")
         val preserved = publish("analysis", failDir, failedOut)
         assertEquals(current.entries, preserved.entries, "Failed rule attempts cannot overwrite valid knowledge")
@@ -274,7 +274,7 @@ class FixtureIntegrationTest {
 
     private fun rejectMigrationSelections(dir: Path, run: MigrationRun, reviews: List<MigrationReview>) {
         val ambiguous = run.tasks.single { caseFor(it).id == "becomesAmbiguous" }
-        val invalid = MigrationReview(ambiguous.taskId, ambiguous.resolution.resolutionId, ambiguous.resolution.rule.revisionId,
+        val invalid = MigrationReview(ambiguous.taskId, ambiguous.resolution!!.resolutionId, ambiguous.resolution!!.rule.revisionId,
             ReviewAction.ACCEPT, Confidence.HIGH, true, "High confidence cannot select one of two definite owners.")
         val invalidFile = cli.write("reviews/invalid-migration-accept.json", migrationBatch(run, listOf(invalid)))
         cli.execute("invalid-migration-accept", "migration", "submit", "--run", dir, "--review", invalidFile, expectedExit = 2)
@@ -316,11 +316,11 @@ class FixtureIntegrationTest {
     private fun analysisReview(run: AnalysisRun, task: AnalysisTask, evidence: List<EvidenceRecord>, version: String,
                                name: String, scenario: FixtureCase = caseFor(task)): AnalysisReview {
         // Assert the independent source-authored target before binding any review to runtime data.
-        assertResolution(task.resolution, scenario, version)
+        assertResolution(task.resolution!!, scenario, version)
         val owner = oracles.getValue(version).descriptor(scenario.versions.getValue(version).owners.single())
         val factory = oracles.getValue(version).descriptor(manifest.versions.getValue(version).factoryClass)
         val refs = setOf(owner, factory).map { raw -> evidence.single { it.ref.apkSha256 == run.apk.sha256 && it.ref.descriptor == raw } }
-        return AnalysisReview(task.taskId, task.resolution.resolutionId, task.rule.revisionId, ReviewAction.ACCEPT, name, Confidence.HIGH,
+        return AnalysisReview(task.taskId, task.resolution!!.resolutionId, task.rule.revisionId, ReviewAction.ACCEPT, name, Confidence.HIGH,
             "Fixture source defines ${scenario.semanticAlias}: a component-scoped logger initialized by the shared logger factory. Confirmed semantic name comes from the fixture contract.",
             listOf("Runtime logging behavior and unavailable decompiled method bodies are outside this protocol regression."), refs.map { it.evidenceId })
     }
@@ -330,12 +330,14 @@ class FixtureIntegrationTest {
         val source = oracles.getValue("v1").descriptor(scenario.versions.getValue("v1").owners.single())
         val target = if (scenario.id == "becomesAmbiguous") sourceOwnerAtV2(scenario) else
             oracles.getValue("v2").descriptor(scenario.versions.getValue("v2").owners.single())
-        assertEquals(ResolutionStatus.UNIQUE, task.resolution.status)
-        assertEquals(setOf(target), task.resolution.candidates.map { it.ref.descriptor }.toSet())
-        val records = listOf(run.sourceApk.sha256 to source, run.targetApk.sha256 to target).map { (sha, raw) ->
-            evidence.single { it.ref.apkSha256 == sha && it.ref.descriptor == raw }
-        }
-        return MigrationReview(task.taskId, task.resolution.resolutionId, task.resolution.rule.revisionId, ReviewAction.ACCEPT, Confidence.HIGH, true,
+        assertEquals(ResolutionStatus.UNIQUE, task.resolution!!.status)
+        assertEquals(setOf(target), task.resolution!!.candidates.map { it.ref.descriptor }.toSet())
+        val required = listOf(run.sourceApk.sha256 to source, run.targetApk.sha256 to target) +
+            task.resolution!!.matches.flatMap { fact ->
+                fact.relatedRefs.map { it.apkSha256 to it.descriptor } + listOfNotNull(fact.field?.call?.declaringType?.let { run.targetApk.sha256 to it })
+            }
+        val records = required.distinct().map { (sha, raw) -> evidence.single { it.ref.apkSha256 == sha && it.ref.descriptor == raw } }
+        return MigrationReview(task.taskId, task.resolution!!.resolutionId, task.resolution!!.rule.revisionId, ReviewAction.ACCEPT, Confidence.HIGH, true,
             "Fixture source retains ${scenario.semanticAlias}'s component responsibility across the two controlled versions.",
             listOf("Business tag, factory method and R8-generated symbols change between fixture versions."),
             listOf("This source-authored fixture review does not evaluate Agent judgement or APK runtime behavior."), records.map { it.evidenceId })
@@ -360,7 +362,7 @@ class FixtureIntegrationTest {
 
     private fun assertResolution(resolution: Resolution, scenario: FixtureCase, version: String) {
         val expected = scenario.versions.getValue(version)
-        assertEquals(expected.resolution, resolution.status.name, "${scenario.id} $version status")
+        assertEquals(expected.resolution!!, resolution.status.name, "${scenario.id} $version status")
         assertEquals(expected.owners.map(oracles.getValue(version)::descriptor).toSet(), resolution.candidates.map { it.ref.descriptor }.toSet(), "${scenario.id} $version identities")
         assertEquals("apk-all-dex", resolution.searchScope)
         assertTrue(resolution.candidates.all { it.ref.apkSha256 == resolution.apkSha256 && it.ref.dexEntry.matches(Regex("classes[0-9]*\\.dex")) })

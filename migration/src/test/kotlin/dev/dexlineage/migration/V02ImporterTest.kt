@@ -31,8 +31,8 @@ class V02ImporterTest {
         val revision = Digests.text(JsonFiles.encode(StoredReview(schemaVersion = 2, revisionId = "", runId = runId, taskId = taskId, supersedes = null, payload = review)))
         val entry = KnowledgeEntry(semanticId, "Cache", ref, captures, listOf(Locator("string-use", "Cache")), listOf(evidence), "Owner manages cache", "bootstrap:$runId:$revision")
         val draft = VersionKnowledge(schemaVersion = 2, knowledgeId = "", artifact = apk, entries = listOf(entry), unresolved = emptyList(), provenance = "bootstrap:$runId")
-        val knowledge = draft.copy(knowledgeId = Digests.text(JsonFiles.encode(draft)))
-        JsonFiles.writeNew(bundle.resolve("knowledge.json"), knowledge)
+        val knowledge = historical(draft)
+        JsonFiles.writeNew(bundle.resolve("knowledge.json"), oldShape(knowledge))
         JsonFiles.writeNew(bundle.resolve("report.json"), mapOf("schemaVersion" to 2, "scenario" to "bootstrap", "runId" to runId,
             "knowledgeId" to knowledge.knowledgeId, "apk" to apk, "profile" to mapOf("minConfidence" to "HIGH"),
             "scan" to MigrationFixtures.stats, "counts" to mapOf("UNREVIEWED" to 0, "ACCEPTED" to 1, "REJECTED" to 0, "DEFERRED" to 0),
@@ -61,9 +61,9 @@ class V02ImporterTest {
         val revision = Digests.text(JsonFiles.encode(StoredReview(schemaVersion = 2, revisionId = "", runId = runId, taskId = old.semanticId, supersedes = null, payload = review)))
         val migrated = old.copy(evidence = allEvidence, provenance = "migration:$runId:$revision")
         val draft = f.knowledge.copy(knowledgeId = "", entries = listOf(migrated), provenance = "migration:$runId")
-        val knowledge = draft.copy(knowledgeId = Digests.text(JsonFiles.encode(draft)))
+        val knowledge = historical(draft)
         val matches = MigrationFixtures.proof(old.binding, old.locators).matches
-        Files.writeString(f.bundle.resolve("knowledge.json"), JsonFiles.encode(knowledge))
+        Files.writeString(f.bundle.resolve("knowledge.json"), JsonFiles.encode(oldShape(knowledge)))
         Files.writeString(f.bundle.resolve("report.json"), JsonFiles.encode(mapOf("schemaVersion" to 2, "kind" to "migration-report", "runId" to runId,
             "sourceKnowledgeId" to "prior-knowledge", "knowledgeId" to knowledge.knowledgeId, "sourceApk" to source, "targetApk" to f.apk,
             "sourceScan" to MigrationFixtures.stats, "targetScan" to MigrationFixtures.stats, "accepted" to 1, "unresolved" to 0, "carriedUnresolved" to 0,
@@ -72,6 +72,11 @@ class V02ImporterTest {
             "decisions" to listOf(mapOf("taskId" to old.semanticId, "name" to old.name, "state" to "ACCEPTED", "target" to old.binding, "revisionId" to revision, "review" to review)))))
         return f.copy(knowledge = knowledge)
     }
+
+    private fun oldShape(value: VersionKnowledge) = JsonFiles.gson.toJsonTree(value).asJsonObject.apply {
+        remove("anchors"); remove("migrationSourceKnowledgeId")
+    }
+    private fun historical(value: VersionKnowledge): VersionKnowledge = value.copy(knowledgeId = Digests.text(JsonFiles.encode(oldShape(value.copy(knowledgeId = "")))))
 
     private fun convert(f: Fixture, name: String = "converted", targets: List<Pair<String, MatchStatus>> = listOf("La;" to MatchStatus.PASS)): VersionKnowledge =
         V02Importer.importWithExecutor(f.bundle.resolve("knowledge.json"), Path.of(f.apk.path), temp.resolve(name)) { artifact, rules, _ ->

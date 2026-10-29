@@ -19,7 +19,7 @@ object V02Importer {
         val inputArtifacts = listOf(knowledgePath, source.resolve("report.json"), source.resolve("mapping.tiny")).map(Digests::artifact)
         val raw = JsonParser.parseString(Files.readString(knowledgePath)).asJsonObject
         requireInput(raw["schemaVersion"]?.asString == "2" && raw["kind"]?.asString == "version-knowledge", "Expected schemaVersion 2 VersionKnowledge")
-        requireInput(!raw.has("parentKnowledgeId") && raw.getAsJsonArray("entries").all { e -> !e.asJsonObject.has("resolution") && !e.asJsonObject.has("ruleRevision") }, "v0.2 input contains newer proof fields")
+        requireInput(!raw.has("parentKnowledgeId") && !raw.has("anchors") && !raw.has("migrationSourceKnowledgeId") && raw.getAsJsonArray("entries").all { e -> !e.asJsonObject.has("resolution") && !e.asJsonObject.has("ruleRevision") }, "v0.2 input contains newer proof fields")
         val oldId = raw["knowledgeId"].asString
         val fingerprint = raw.deepCopy().apply { addProperty("knowledgeId", "") }
         requireInput(oldId == Digests.text(JsonFiles.encode(fingerprint)), "v0.2 knowledge fingerprint mismatch")

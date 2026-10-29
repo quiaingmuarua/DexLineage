@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 4,
+  "kind": "analysis-rules",
+  "anchors": [
+    {
+      "key": "read-rpc",
+      "strategy": {
+        "strategyId": "messages.rpc-descriptor",
+        "resultKind": "METHOD",
+        "parameters": { "service": "example.Service", "rpc": "Read" }
+      }
+    }
+  ],
+  "items": [
+    {
+      "key": "read-request",
+      "proposedName": "ReadRequest",
+      "strategy": {
+        "strategyId": "messages.rpc-message",
+        "resultKind": "CLASS",
+        "requires": { "descriptor": "read-rpc" },
+        "parameters": { "service": "example.Service", "rpc": "Read", "role": "request" }
+      }
+    },
+    {
+      "key": "read-response",
+      "proposedName": "ReadResponse",
+      "strategy": {
+        "strategyId": "messages.rpc-message",
+        "resultKind": "CLASS",
+        "requires": { "descriptor": "read-rpc" },
+        "parameters": { "service": "example.Service", "rpc": "Read", "role": "response" }
+      }
+    }
+  ]
+}

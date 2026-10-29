@@ -45,8 +45,8 @@ class AnalysisTest {
         return dir to r
     }
     private fun review(run: AnalysisRun, task: AnalysisTask = run.tasks.first(), name: String = "Component", action: ReviewAction = ReviewAction.ACCEPT): AnalysisReview =
-        AnalysisReview(task.taskId, task.resolution.resolutionId, task.rule.revisionId, action, name, Confidence.HIGH,
-            "Read actual owner responsibility", emptyList(), task.resolution.candidates.map { Identities.evidenceId(run.runId, it.ref) })
+        AnalysisReview(task.taskId, task.resolution!!.resolutionId, task.rule.revisionId, action, name, Confidence.HIGH,
+            "Read actual owner responsibility", emptyList(), task.resolution!!.candidates.map { Identities.evidenceId(run.runId, it.ref) })
     private fun submit(dir: Path, run: AnalysisRun, filename: String, items: List<AnalysisReview>): AnalysisSubmitResult {
         val file = temp.resolve(filename)
         JsonFiles.writeNew(file, AnalysisReviewBatch(runId = run.runId, apkSha256 = run.apk.sha256, items = items))
@@ -149,16 +149,16 @@ class AnalysisTest {
 
     @Test fun `target descriptor is not an accepted rule input`() {
         val p = temp.resolve("forged.json")
-        Files.writeString(p, """{"schemaVersion":3,"kind":"analysis-rules","items":[{"key":"x","expectedOwner":"La;","locators":[{"kind":"string-use","anchor":"x"}]}]}""")
+        Files.writeString(p, """{"schemaVersion":4,"kind":"analysis-rules","items":[{"key":"x","expectedOwner":"La;","locators":[{"kind":"string-use","anchor":"x"}]}]}""")
         assertFailsWith<ValidationException> { AnalysisService.readRules(p) }
     }
 
     @Test fun `unknown nested rule fields and misspelled profile options do not weaken constraints`() {
         val rules = temp.resolve("typo-rules.json")
-        Files.writeString(rules, """{"schemaVersion":3,"kind":"analysis-rules","items":[{"key":"x","locators":[{"kind":"field-initializer","anchor":"x","factors":[{"kind":"method-signature","returnSameAsField":true,"parameterType":["Ljava/lang/String;"]}]}]}]}""")
+        Files.writeString(rules, """{"schemaVersion":4,"kind":"analysis-rules","items":[{"key":"x","locators":[{"kind":"field-initializer","anchor":"x","factors":[{"kind":"method-signature","returnSameAsField":true,"parameterType":["Ljava/lang/String;"]}]}]}]}""")
         assertFailsWith<ValidationException> { AnalysisService.readRules(rules) }
         val profile = temp.resolve("typo-profile.json")
-        Files.writeString(profile, """{"schemaVersion":3,"id":"x","discovery":{"kind":"string-use","anchor":"x"},"locator_template":{}}""")
+        Files.writeString(profile, """{"schemaVersion":4,"id":"x","discovery":{"kind":"string-use","anchor":"x"},"locator_template":{}}""")
         assertFailsWith<ValidationException> { AnalysisService.readProfile(profile) }
     }
 
@@ -175,6 +175,21 @@ class AnalysisTest {
         assertEquals(base.entries, result.entries)
         assertEquals(base.knowledgeId, result.parentKnowledgeId)
         assertFailsWith<ValidationException> { submit(dir, run, "invalid-accept.json", listOf(review(run))) }
+    }
+
+    @Test fun `unchanged base confirmation is inherited without creating a new review`() {
+        val apk = apk()
+        val base = base(apk)
+        val entry = base.entries.single()
+        val input = AnalysisRuleItem("existing", semanticId = entry.semanticId, proposedName = entry.name, locators = entry.locators)
+        val target = AnalysisService.makeTask(apk, input, entry.ruleRevision!!, entry.resolution, null, base, inherited = true)
+        val (dir, current) = run(listOf(target), apk, base)
+        assertEquals(1, AnalysisService.tasks(dir, "INHERITED").total)
+        assertEquals(0, AnalysisService.tasks(dir).total)
+        val published = AnalysisService.publish(dir, temp.resolve("inherited"))
+        assertEquals(0, published.acceptedUpdates)
+        assertEquals(base.entries, KnowledgeFiles.read(Path.of(published.knowledgePath)).entries)
+        assertFailsWith<ValidationException> { submit(dir, current, "unnecessary.json", listOf(review(current))) }
     }
 
     @Test fun `new rule replaces old rule and existing semantic id cannot move to another entity`() {
@@ -250,7 +265,7 @@ class AnalysisTest {
         val apk = apk()
         val (_, run) = run(listOf(task(apk)), apk)
         val r = review(run)
-        val owner = run.tasks.single().resolution.uniqueRef!!
+        val owner = run.tasks.single().resolution!!.uniqueRef!!
         val record = EvidenceRecord(evidenceId = r.evidenceIds.single(), runId = run.runId, ref = owner, javaPath = "unused", javaSha256 = "unused",
             smaliPath = "unused", smaliSha256 = "unused", incomplete = true, diagnostics = listOf("placeholder"), elapsedMillis = 0)
         assertEquals(TaskState.DEFERRED, AnalysisPolicy.decide(run, mapOf(r.taskId to r), mapOf(record.evidenceId to record)).single().state)

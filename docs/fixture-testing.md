@@ -1,6 +1,6 @@
 # Public APK integration regression
 
-The fixture suite preserves already supported rules and invariants through the real Android toolchain. It complements the data-level unit tests and the private `realCaseTest`; it does not discover new rules or assess an Agent's ability to infer semantics.
+The fixture suite preserves supported rules and invariants through the real Android toolchain, including schema-4 dependency rounds and compiled recipes. It complements the data-level unit tests and the private `realCaseTest`; it does not discover new rules or assess an Agent's ability to infer semantics.
 
 ## Run
 
@@ -37,6 +37,18 @@ Assertions cover:
 - whole-rule replacement, same-APK ID continuity, preservation after failed updates, review identity validation and idempotency;
 - missing Review, invalid ACCEPT attempts, process restart, saved publication replay and independent Mapping readback.
 
+The multi-round fixture additionally uses self-authored logger, Handler and RPC models. The source-side simulated JADX annotations are derived from the independent R8 oracle and supplied only to the corpus importer; they are post-match assertions, not matcher parameters. It checks:
+
+- a CLASS logger anchor followed by a full-identity METHOD factory anchor, with methods renamed between versions;
+- multiple same-signature methods in one owner remaining ambiguous, and UNKNOWN prerequisites blocking downstream execution;
+- className/requestId role extraction, interface implementations and constant-name returns;
+- service/RPC, builder and request/response relationships, including marshaller factory versus constructor forms and relocation between Stub/helper owners;
+- corpus targets remaining UNCONFIGURED when no rule exists, and imported source identity mismatches being rejected after matching;
+- anchors publishing without Review but never entering Tiny, followed by reviewed class publication in later subprocess rounds;
+- target-version anchors being resolved again, target-base continuation, stale dependency evidence rejection and same-APK knowledge preservation.
+
+CLASS and METHOD use separate entity identities. Assertions for methods compare the full original owner/name/signature obtained from the test oracle; checking only an owner class would miss incorrect method deduplication. Fixture semantics remain predetermined, and no public test has a private Messages target count or path.
+
 Do not assert complete decompiled Java text, instruction offsets or APK hashes across builds. Assert identity, structure, captures, Resolution, review decisions and name application. APK digests still bind each actual run to its actual input.
 
 ## Add a regression case
@@ -44,7 +56,7 @@ Do not assert complete decompiled Java text, instruction offsets or APK hashes a
 1. Reduce the observed behavior to a self-authored Java example that is safe to publish. Use meaningful source class/member names. Preserve only the relevant structure; do not copy private APK code, proprietary strings, credentials or decompiled outputs.
 2. Add the case to `fixtures/android/app/src/v1/java/` and `src/v2/java/`, or share unchanged support code in `src/main/java/`. Make version differences explicit. Keep the test within the existing matching capabilities unless a separate implementation task authorizes a new capability.
 3. Declare both versions in `fixtures/cases.json` before reading actual candidate output. Record source owners, expected match outcome, logger fields/signatures and the intended semantic conclusion. Negative cases need explicit expected outcomes too.
-4. Extend the CLI regression assertions for the new behavior. Use the R8 oracle for candidate identities, not observed candidates to derive an expected answer. Keep production rules free of expected obfuscated owners. Do not inject a synthetic Resolution or bypass the normal queue, submit or publish commands.
+4. Extend the CLI regression assertions for the new behavior, including its immutable dependency rounds when relevant. Use the R8 oracle for candidate identities, not observed candidates to derive an expected answer. Keep production rules free of expected obfuscated owners. Do not inject a synthetic Resolution or bypass the normal queue, submit or publish commands. Generated manual corpus inputs remain outside the matcher context.
 5. Run `fixtureIntegrationTest` and inspect preflight and command diagnostics. If R8 eliminated or changed the required structure, fix or re-scope the fixture transparently; do not add broad name-preservation rules or weaken matching just to regain a pass.
 6. Commit only source, rules/oracle, tests and relevant docs. APKs, R8 output and CLI runs stay in build directories. New private experiments belong in `.runtime/`; repeatable private acceptance belongs in `.local/`.
 

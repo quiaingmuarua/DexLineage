@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 4,
+  "kind": "analysis-rules",
+  "anchors": [
+    { "key": "logger", "locators": [{ "kind": "string-use", "anchor": "Replace with your logger's exact marker" }] },
+    {
+      "key": "logger-factory",
+      "strategy": {
+        "strategyId": "builtin.method-signature",
+        "resultKind": "METHOD",
+        "requires": { "owner": "logger" },
+        "parameters": {
+          "parameterTypes": ["Ljava/lang/String;", "Ljava/lang/String;"],
+          "returnSameAsOwner": true,
+          "requiredFlags": ["STATIC"]
+        }
+      }
+    }
+  ],
+  "items": [
+    {
+      "key": "component",
+      "proposedName": "ReviewedComponent",
+      "strategy": {
+        "strategyId": "messages.logger-fields",
+        "resultKind": "CLASS",
+        "requires": { "factory": "logger-factory" },
+        "parameters": { "component": "Replace with the actual captured component string" }
+      }
+    }
+  ]
+}

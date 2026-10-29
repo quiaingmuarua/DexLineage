@@ -165,7 +165,7 @@ class MigrationServiceTest {
         val published = KnowledgeFiles.read(out.resolve("knowledge.json")).entries.single()
         assertEquals("new literal", published.locators.single().anchor)
         assertEquals(mapOf("literal" to "new literal"), published.captures)
-        assertEquals(f.run.tasks.first().resolution.rule, published.ruleRevision)
+        assertEquals(f.run.tasks.first().resolution!!.rule, published.ruleRevision)
         assertNotEquals(f.run.tasks.first().entry.ruleRevision, published.ruleRevision)
         assertEquals(before, Digests.file(Path.of(f.run.knowledgeFile.path)))
         val stale = MigrationFixtures.review(f.run).copy(ruleRevisionId = f.run.tasks.first().entry.ruleRevision!!.revisionId)
@@ -177,5 +177,58 @@ class MigrationServiceTest {
         assertFailsWith<ValidationException> { MigrationService.readRules(path) }
         Files.writeString(path, """{"schemaVersion":3,"items":[{"semanticId":"id","locators":[{"kind":"string-use","anchor":"value"}],"expectedTarget":"La;"}]}""")
         assertFailsWith<ValidationException> { MigrationService.readRules(path) }
+    }
+
+    @Test fun `target progress preserves a confirmed entry across inheritance and a failed rule update`() {
+        val f = fixture()
+        submit(f, "round1-review.json", listOf(MigrationFixtures.review(f.run)))
+        val baseDir = temp.resolve("round1-published")
+        MigrationService.publish(f.dir, baseDir)
+        val basePath = baseDir.resolve("knowledge.json")
+        val base = KnowledgeFiles.read(basePath)
+        assertEquals(f.run.knowledge.knowledgeId, base.migrationSourceKnowledgeId)
+        val inherited = f.run.copy(runId = "", createdAt = "round2", targetBaseFile = Digests.artifact(basePath), targetBase = base,
+            tasks = f.run.tasks.map { task -> if (task.taskId == "item-0") task.copy(inheritedEntry = base.entries.single()) else task })
+            .let { it.copy(runId = it.fingerprint()) }
+        val inheritedDir = Files.createDirectory(temp.resolve("round2"))
+        JsonFiles.writeNew(inheritedDir.resolve("run.json"), inherited)
+        val inheritedPage = MigrationService.tasks(inheritedDir, "INHERITED")
+        assertEquals(1, inheritedPage.total)
+        assertEquals(MigrationExecutionState.INHERITED, inheritedPage.tasks.single().executionState)
+        val round2 = temp.resolve("round2-published")
+        MigrationService.publish(inheritedDir, round2)
+        assertEquals(base.entries, KnowledgeFiles.read(round2.resolve("knowledge.json")).entries)
+        assertEquals(Files.readString(baseDir.resolve("mapping.tiny")), Files.readString(round2.resolve("mapping.tiny")))
+
+        val newLocator = Locator("string-use", "intentionally absent")
+        val override = MigrationRuleOverride("item-0", listOf(newLocator), f.run.tasks.first().entry.ruleRevision!!.revisionId)
+        val rulesPath = temp.resolve("failed-round-rules.json")
+        JsonFiles.writeNew(rulesPath, MigrationRulesFile(items = listOf(override)))
+        val rule = RuleProofs.revision(listOf(newLocator))
+        val failed = inherited.copy(runId = "", rulesFile = Digests.artifact(rulesPath), ruleOverrides = listOf(override),
+            tasks = inherited.tasks.map { task -> if (task.taskId == "item-0") task.copy(rule = rule, resolution = RuleProofs.create(f.run.targetApk.sha256, rule, f.run.engineBuildId, emptyList()), inheritedEntry = null) else task })
+            .let { it.copy(runId = it.fingerprint()) }
+        val failedDir = Files.createDirectory(temp.resolve("failed-round"))
+        JsonFiles.writeNew(failedDir.resolve("run.json"), failed)
+        assertEquals(TaskState.INVALID, MigrationService.tasks(failedDir, "ALL").tasks.first().state)
+        val failedOut = temp.resolve("failed-round-published")
+        MigrationService.publish(failedDir, failedOut)
+        val preserved = KnowledgeFiles.read(failedOut.resolve("knowledge.json"))
+        assertEquals(base.entries, preserved.entries)
+        assertEquals(base.unresolved.map { it.entry }, preserved.unresolved.map { it.entry })
+        assertEquals(Files.readString(baseDir.resolve("mapping.tiny")), Files.readString(failedOut.resolve("mapping.tiny")))
+    }
+
+    @Test fun `target progress cannot be borrowed from another source or target APK`() {
+        val f = fixture()
+        val base = VersionKnowledge(knowledgeId = "", artifact = f.run.targetApk, entries = emptyList(),
+            unresolved = f.run.knowledge.unresolved + f.run.knowledge.entries.map { UnresolvedKnowledge(it, f.run.knowledge.knowledgeId, "waiting", "run") },
+            provenance = "migration:test", migrationSourceKnowledgeId = "other-source")
+            .let { it.copy(knowledgeId = KnowledgeFiles.id(it)) }
+        assertFailsWith<ValidationException> { MigrationService.validateTargetBase(f.run.knowledge, f.run.targetApk, base) }
+        val correctSource = base.copy(knowledgeId = "", migrationSourceKnowledgeId = f.run.knowledge.knowledgeId)
+            .let { it.copy(knowledgeId = KnowledgeFiles.id(it)) }
+        assertFailsWith<ValidationException> { MigrationService.validateTargetBase(f.run.knowledge, f.run.sourceApk, correctSource) }
+        MigrationService.validateTargetBase(f.run.knowledge, f.run.targetApk, correctSource)
     }
 }

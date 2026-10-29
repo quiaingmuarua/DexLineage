@@ -1,11 +1,13 @@
 # DexLineage
 
-DexLineage is a reusable APK analysis project. Version 0.3 provides two scenes:
+DexLineage is a reusable APK analysis project. Version 0.4 provides two scenes:
 
-- **Analysis:** discover clues or supply executable rules, identify a unique entity, review its meaning, then create or extend knowledge for that APK.
-- **Migration:** freeze existing semantic targets, execute rules against another APK, review continuity, and publish new bindings with unresolved history retained.
+- **Analysis:** import manual annotations or discover clues, combine built-in matching with compiled application strategies, resolve supporting anchors over immutable rounds, then review and publish class names.
+- **Migration:** freeze existing semantic targets, resolve their rules and dependencies in another APK, review continuity, and publish new bindings with unresolved history retained.
 
 Every new published binding requires a unique, definite result from actual code matching. Multiple candidates are invalid. An Agent can revise the rule and start another run, but cannot choose a candidate through Review text or a HIGH confidence declaration.
+
+Supporting CLASS or METHOD anchors are mechanical matching results, not Rename entries. A UNIQUE anchor can be published without a semantic Review and consumed by a later round. Final class names require review of the owner and the supporting evidence chain. All output Mapping rows remain class-only.
 
 ## Build from a clean checkout
 
@@ -76,6 +78,33 @@ Discovery is optional. An Agent can write an [Analysis rules file](examples/anal
 
 Use `tasks --state INVALID` and `inspect` to investigate invalid results. Their candidates and diagnostics remain available; they do not require an artificial Review. Even a unique result needs actual semantic review before acceptance. Field-initializer naming requires owner and internal factory code; plain string-use rules require owner code and their actual matching evidence.
 
+## Import manual work and execute dependency rounds
+
+Import a JADX `projectVersion=1` annotation project into a new corpus directory:
+
+```powershell
+& $cli analysis import-jadx --apk 'D:\apks\current.apk' --project 'D:\apks\current.apk.jadx' --out .local\manual-corpus
+& $cli analysis targets --corpus .local\manual-corpus\corpus.json --limit 20
+```
+
+The corpus preserves class, field, method and local annotations. Class annotations become stable targets; members and local positions remain research context. Import validates original class/member references. A class target's source identity is checked after matching; it is never passed to the matcher as an expected-owner filter. Importing an annotation does not approve a name for publication. The 544 annotations / 238 classes in the private Messages audit describe that local case, not a public default or a coverage target.
+
+An Analysis rule item can refer to a corpus target using `corpusTargetId`. Pass `--corpus` to `analysis prepare`; `analysis targets --corpus ... --run ...` shows every manual target, including `UNCONFIGURED` items and failures. New discoveries outside the corpus are reported separately.
+
+Copy [the multi-round example](examples/multiround-rules.json) and replace its public marker/component strings with observed inputs. It defines a logger class anchor, a current-version factory METHOD anchor and a class target that uses that factory:
+
+```powershell
+& $cli analysis prepare --apk 'D:\apks\current.apk' --rules .local\round-rules.json --corpus .local\manual-corpus\corpus.json --run .local\round-1
+& $cli analysis tasks --run .local\round-1 --state ALL
+& $cli analysis publish --run .local\round-1 --out .local\knowledge-round-1
+& $cli analysis prepare --apk 'D:\apks\current.apk' --rules .local\round-rules.json --corpus .local\manual-corpus\corpus.json --base-knowledge .local\knowledge-round-1\knowledge.json --run .local\round-2
+& $cli analysis publish --run .local\round-2 --out .local\knowledge-round-2
+```
+
+Continue with a new run and the latest base until the required class tasks are ready for `inspect / submit / publish`. This example needs another round before the class can use its newly published factory. `prepare` never consumes anchors created within that same execution. Missing resolved prerequisites are `WAITING_DEPENDENCY`, with no fabricated Resolution. `inspect --task 'anchor:logger-factory'` reads an anchor's code; ordinary task IDs read class candidates and their dependency evidence.
+
+The compile-time registry provides Messages-oriented logger, Handler-name and RPC/Proto strategies. They take configuration and structured APK facts, not hardcoded obfuscated answers. [The RPC example](examples/rpc-rules.json) demonstrates one descriptor METHOD anchor feeding request and response class targets. Real application tags, service lists and manual names belong in `.local`; the strategy code and self-authored fixtures are public.
+
 ## Continue Analysis on existing knowledge
 
 Pass a knowledge package from the same APK with `--base-knowledge`:
@@ -87,6 +116,8 @@ Pass a knowledge package from the same APK with `--base-knowledge`:
 ```
 
 The base knowledge ID is frozen. Existing current-version entities retain their `semanticId`; names are not identity keys. Successful updates and new confirmations are combined with unchanged base entries. A failed rule attempt, rejected update or conflicting proposal does not erase the prior valid binding, name or rule. This version does not move an existing semantic ID to another entity in the same APK.
+
+Unchanged confirmations and supporting proofs can be inherited when their rules, implementation and dependency proofs are unchanged. An inherited class does not need another Review. Updating an anchor invalidates reuse of downstream proofs that refer to its previous revision; old published packages are preserved.
 
 An explicitly selected pending item whose last binding belongs to the current APK can be retried. Historical pending entries from other APKs are carried forward; Analysis does not automatically investigate or claim them by matching a name.
 
@@ -105,6 +136,14 @@ Pass the published knowledge file and accompanying evidence directly to Migratio
 
 Migration only creates tasks for confirmed semantic targets in the source knowledge. It preserves their names and keeps unresolved knowledge with its last confirmed source. The default confidence threshold is HIGH; `prepare --min-confidence MEDIUM` freezes another threshold without relaxing uniqueness or identity checks.
 
+Source anchors supply rule definitions, not target-version bindings. Migration resolves them again on the target APK. After publishing one round, keep the original `--knowledge` and source/target APKs fixed and pass the prior target package through `--target-base`:
+
+```powershell
+& $cli migration prepare --knowledge .local\knowledge-v1\knowledge.json --source-apk 'D:\apks\old.apk' --target-apk 'D:\apks\new.apk' --target-base .local\knowledge-v2-round-1\knowledge.json --run .local\migration-002
+```
+
+The target base must belong to that same source knowledge and target APK. It preserves earlier target confirmations while enabling later dependency rounds; it does not replace the frozen source target set.
+
 Supply an [override file](examples/migration-overrides.json) with `migration prepare --rules ...` and a new run directory to revise rules. Each override replaces that target's entire active locator set; unlisted targets keep their rules. Unknown semantic IDs are rejected. A target-version rule need not match the source APK. Accepted migration publishes the rule revision actually used for the new binding.
 
 Multiple candidates cannot be resolved by Review. `migration inspect --candidate 'semantic-id=Lx/a;,Lx/b;'` remains available for reading selected candidates; it grants no publication eligibility.
@@ -113,18 +152,18 @@ Multiple candidates cannot be resolved by Review. `migration inspect --candidate
 
 Use `tasks` to obtain task, Resolution and rule revision IDs. Both Review formats bind `resolutionId` and `ruleRevisionId`; they do not choose an entity. Analysis may propose a name. Migration judges whether the existing name and responsibility continue. See [the exact formats](docs/architecture.md#reviews).
 
-Task states are `UNREVIEWED`, `ACCEPTED`, `REJECTED`, `DEFERRED` and `INVALID`. Match results separately identify `UNIQUE`, `NO_MATCH`, `AMBIGUOUS` or `UNKNOWN`. Scan failure is an execution error. Listing creates no claims or leases; one coordinator submits sequentially.
+Class review states are `UNREVIEWED`, `ACCEPTED`, `REJECTED`, `DEFERRED` and `INVALID`. Execution separately reports `EXECUTED`, `WAITING_DEPENDENCY` or `INHERITED`; task lists also contain supporting anchor tasks. Match results identify `UNIQUE`, `NO_MATCH`, `AMBIGUOUS` or `UNKNOWN`. Scan failure is an execution error. Listing creates no claims or leases; one coordinator submits sequentially.
 
 Review batches save atomically. Identical resubmission is idempotent; replacing a Review requires its current revision in `supersedes`. Modified rules create a new execution, and old Review identities cannot pretend to describe its new Resolution.
 
 Every publication uses a new directory containing:
 
-- `knowledge.json`: schema 3, bindings, active rule revisions, matching proofs, parent knowledge reference, review provenance and unresolved history.
+- `knowledge.json`: schema 4, class bindings, supporting anchors, active rules, dependency proofs, parent knowledge reference, review provenance and unresolved history.
 - `mapping.tiny`: class-only Tiny v2 `obfuscated` → `named` mappings.
 - `report.json`: task outcomes, active rules, diagnostics and published review revisions.
 - `evidence/`: required Java/Smali files with content hashes.
 
-Keep the package together. Matching proofs are embedded in knowledge; referenced code is copied into the package. Reproduce a same-run publication after later reviews:
+Keep the package together. Matching proofs include their frozen dependencies; all referenced code is copied into the package, including historical proof evidence. Reproduce a same-run publication after later reviews:
 
 ```powershell
 & $cli analysis publish --run .local\analysis-001 --at .local\knowledge-v1\report.json --out .local\knowledge-v1-replay
@@ -136,11 +175,14 @@ This replays saved decisions. Re-executing matching from APKs and fixed rules is
 ## Upgrade historical knowledge explicitly
 
 ```powershell
-& $cli knowledge import-v02 --knowledge .local\v02-package\knowledge.json --apk 'D:\apks\current.apk' --out .local\v03-imported
+& $cli knowledge import-v03 --knowledge .local\v03-package\knowledge.json --apk 'D:\apks\current.apk' --out .local\v04-imported
+& $cli knowledge import-v02 --knowledge .local\v02-package\knowledge.json --apk 'D:\apks\current.apk' --out .local\v02-upgraded
 & $cli knowledge import-s1 --output .local\s1-output --run .local\s1-run --out .local\s1-imported
 ```
 
-The v0.2 importer validates the knowledge package, report, Mapping and code evidence, then reruns its rules against the supplied APK. Only a unique result that remains the original binding can retain the validated historical semantic review. Ambiguous, unknown, missing or differently bound results become pending with their historical source preserved. Broken packages or missing required proof are input errors. S1 conversion retains its original consistency checks and applies the same uniqueness gate.
+The importers validate the old knowledge package, report, Mapping and code evidence, then rerun rules against the supplied APK. Only a unique result that remains the original binding can retain the validated historical semantic review. Ambiguous, unknown, missing or differently bound results become pending with their historical source preserved. Broken packages or missing required proof are input errors. S1 conversion retains its original consistency checks and applies the same uniqueness gate.
+
+A v0.3 package may inherit an entry whose original Review lives in an earlier publication. Supply those packages explicitly with `--history <manifest.json>`; the importer does not guess directories or search private history. The manifest is `{"schemaVersion":4,"knowledgeFiles":["relative/path/to/knowledge.json"]}`, with paths relative to the manifest. The importer validates the cited package chain and preserves its provenance. Old files are never rewritten.
 
 Old v0.2 Migration reports did not record their configurable confidence threshold. Their confirmed reviews therefore must be HIGH to prove they satisfied every supported old threshold; a weaker review lacks the required policy proof and is an input error. Old single-version reports retained the threshold in their profile and are checked against that value.
 
@@ -152,34 +194,34 @@ Evidence completeness means verifiable files, identities, hashes and review refe
 
 The explicit `realCaseTest` task requires local case properties; normal builds exclude it. The real case uses existing APKs and Agent-authored reviews, tests fresh matching separately from publication replay, and checks invalid ambiguity, same-APK continuation, failed-update retention, legacy upgrade and Mapping readback. It does not fabricate semantic reviews or require historical success counts.
 
-Paths resolve relative to the properties file. Use forward slashes for Windows paths:
+For the v0.4 multi-round acceptance runner, use a local properties file:
 
 ```properties
-analysisRun=analysis-source
-analysisOutput=knowledge-source
-migrationRun=migration-target
-migrationOutput=knowledge-target
-continuationRun=analysis-target-continued
-continuationOutput=knowledge-target-continued
-failedUpdateRun=analysis-failed-update
-failedUpdateOutput=knowledge-after-failed-update
-upgradedV02Output=upgraded-v02
-v02Knowledge=legacy-v02/knowledge.json
+scenario=v04
+caseManifest=manifest.json
 acceptanceRoot=acceptance
 ```
 
-These paths point to actual prepared/reviewed/published case artifacts. The test freshly reruns discovery and matching, replays publications, checks continuation IDs and failed-update preservation, checks the legacy upgrade gate, then independently reads back source and final target Mapping files.
+The schema-4 manifest records `corpus`, ordered `analysisRounds` and `migrationRounds` (each with `run` and `output`), optional `shapeRounds`, and `upgradedV03` package paths. Paths resolve relative to the manifest. Optional `expectedAnnotationCounts`, `expectedClassTargets`, `requiredStrategyIds` and `requiredPublishedRules` make the local acceptance requirements explicit. The runner freshly checks producer anchors before using them as dependencies, reexecutes matching, replays each saved publication, then independently reads back final class mappings. Keep the manifest and all private results under `.local`.
+
+On Windows, very large selections can exceed the `.bat` command-line limit. Page the task list into smaller batches, or invoke the same installed CLI without the batch wrapper:
 
 ```powershell
-.\gradlew.bat realCaseTest "-PcaseProperties=.local/v03/messages/acceptance.properties"
+java -Xmx3g '-Dorg.slf4j.simpleLogger.defaultLogLevel=warn' -cp 'build/install/dexlineage/lib/*' dev.dexlineage.cli.MainKt migration inspect --run .local/my-case/target-run --task $taskIds
+```
+
+Use a new schema-4 case configuration; old v0.3 runs must be upgraded explicitly before reuse. The test's required property keys are documented by its [source](cli/src/test/kotlin/dev/dexlineage/cli/RealCaseTest.kt), and paths resolve relative to the properties file. A case configuration points to actual prepared, reviewed and published artifacts, not a candidate-answer list.
+
+```powershell
+.\gradlew.bat realCaseTest "-PcaseProperties=.local/my-case/acceptance.properties"
 ```
 
 Keep case configuration and acceptance records in `.local/`. Evidence-volume metrics describe generated/cached files, not automatic measurement of Agent reading. Partial code and the review's unverified scope remain visible.
 
 Commands emit JSON on stdout and diagnostics on stderr. Exit codes are `0` for completion, including invalid/pending items; `2` for invalid inputs or Review submissions; and `1` for execution failure.
 
-This version supports exact DEX method-string anchors and field-initializer factors. It does not add arbitrary scripts, custom Handler registration, member renaming, GUI/MCP or model calls. See [architecture and contracts](docs/architecture.md) for rule and knowledge boundaries.
+This version supports the two existing locator kinds and compiled strategies for current-version method signatures, logger calls, Handler naming and RPC/Proto roles. Unknown code shapes remain visible instead of being treated as proven matches. The registry is compiled into the application; there is no dynamic plugin/script loader, member renaming, GUI/MCP or model API. See [architecture and contracts](docs/architecture.md) for rule and knowledge boundaries.
 
 ## License
 
-DexLineage and its public fixture source use [Apache-2.0](LICENSE). The CLI distribution includes [third-party notices](THIRD_PARTY_NOTICES.md) and the corresponding license texts. Version 0.3.0 is distributed as source; this first delivery does not create a release tag or a GitHub Release.
+DexLineage and its public fixture source use [Apache-2.0](LICENSE). The CLI distribution includes [third-party notices](THIRD_PARTY_NOTICES.md) and the corresponding license texts. Version 0.4.0 is distributed as source; release tags and GitHub Releases are separate actions.

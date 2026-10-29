@@ -85,9 +85,12 @@ object RuleEngine {
     }
 
     fun query(artifact: Artifact, locators: List<Locator>, workDir: Path): QueryResult {
+        return queryWithScan(artifact, locators, workDir, ApkReader.scan(Path.of(artifact.path), locators.map { it.anchor }.toSet()))
+    }
+
+    internal fun queryWithScan(artifact: Artifact, locators: List<Locator>, workDir: Path, scan: ScanResult): QueryResult {
         locators.forEach(::validate)
         Digests.verify(artifact)
-        val scan = ApkReader.scan(Path.of(artifact.path), locators.map { it.anchor }.toSet())
         if (scan.stats.diagnostics.isNotEmpty()) throw ExecutionException("DEX scan incomplete: ${scan.stats.diagnostics.joinToString("; ")}")
         val ownersByLocator = locators.map { locator -> scan.uses[locator.anchor].orEmpty().map { it.classDescriptor }.toSet() }
         val structuralOwners = locators.indices.filter { locators[it].kind == "field-initializer" }

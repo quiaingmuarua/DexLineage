@@ -32,7 +32,7 @@ internal object LegacyUpgrade {
             val same = proof.status == ResolutionStatus.UNIQUE && proof.uniqueRef == old.binding
             val copied = copyEntry(old, sourceRoot, out)
             val reason = if (same) "unique_original_binding_review_reused" else if (proof.status == ResolutionStatus.UNIQUE) "unique_result_differs_from_original_binding" else "invalid_${proof.status.name.lowercase()}"
-            if (same) accepted += copied.copy(ruleRevision = proof.rule, resolution = proof)
+            if (same) accepted += copied.copy(captures = RuleProofs.captures(proof), ruleRevision = proof.rule, resolution = proof)
             else pending += UnresolvedKnowledge(copied, parentKnowledgeId, reason, sourceRoot.toAbsolutePath().normalize().toString())
             UpgradeDecision(old.semanticId, proof, same, reason)
         }

@@ -7,7 +7,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
-/** Content-bound files, independent of Bootstrap and Migration task lifecycles. */
+/** Content-bound files, independent of Analysis and Migration task lifecycles. */
 object EvidenceFiles {
     fun publish(directory: Path, runId: String, artifact: Artifact, refs: List<ClassRef>, code: List<DecompiledClass>): List<EvidenceRecord> {
         Digests.verify(artifact)
@@ -62,16 +62,17 @@ object KnowledgeFiles {
         requireInput(value.kind == "version-knowledge", "Not a VersionKnowledge document; use explicit S1 import for old data")
         requireInput(value.knowledgeId == id(value), "Knowledge fingerprint mismatch")
         validate(value)
-        (value.entries.flatMap { it.evidence } + value.unresolved.flatMap { it.entry.evidence }).forEach {
+        evidenceClosure(value).forEach {
             verifyCode(path.toAbsolutePath().parent, it.evidenceId, it.javaPath, it.javaSha256, it.smaliPath, it.smaliSha256)
         }
         value
     }
 
     fun write(output: Path, value: VersionKnowledge): VersionKnowledge {
-        val normalized = value.copy(entries = value.entries.sortedBy { it.semanticId }, unresolved = value.unresolved.sortedBy { it.entry.semanticId }, knowledgeId = "")
+        val normalized = value.copy(entries = value.entries.sortedBy { it.semanticId }, unresolved = value.unresolved.sortedBy { it.entry.semanticId },
+            anchors = value.anchors.sortedBy { it.key }, knowledgeId = "")
         validate(normalized)
-        (normalized.entries.flatMap { it.evidence } + normalized.unresolved.flatMap { it.entry.evidence }).forEach {
+        evidenceClosure(normalized).forEach {
             verifyCode(output, it.evidenceId, it.javaPath, it.javaSha256, it.smaliPath, it.smaliSha256)
         }
         val published = normalized.copy(knowledgeId = id(normalized))
@@ -88,14 +89,40 @@ object KnowledgeFiles {
         return evidence
     }
 
+    fun evidenceClosure(value: Resolution): List<KnowledgeEvidence> = uniqueEvidence(value.dependencies.values.flatMap(::evidenceClosure))
+    fun evidenceClosure(value: SupportAnchor): List<KnowledgeEvidence> = uniqueEvidence(value.evidence + evidenceClosure(value.resolution))
+    fun evidenceClosure(value: KnowledgeEntry): List<KnowledgeEvidence> = uniqueEvidence(value.evidence + value.resolution?.let(::evidenceClosure).orEmpty())
+    fun evidenceClosure(value: VersionKnowledge): List<KnowledgeEvidence> = uniqueEvidence(
+        value.entries.flatMap(::evidenceClosure) + value.unresolved.flatMap { evidenceClosure(it.entry) } + value.anchors.flatMap(::evidenceClosure))
+
+    fun copyEntry(sourceRoot: Path, output: Path, value: KnowledgeEntry): KnowledgeEntry {
+        evidenceClosure(value).forEach { copyEvidence(sourceRoot, output, it) }; return value
+    }
+    fun copyAnchor(sourceRoot: Path, output: Path, value: SupportAnchor): SupportAnchor {
+        evidenceClosure(value).forEach { copyEvidence(sourceRoot, output, it) }; return value
+    }
+    fun validateAnchor(anchor: SupportAnchor, apkSha256: String? = null) {
+        RuleProofs.validateAnchor(anchor, apkSha256)
+        requireInput(anchor.evidence.any { it.ref == anchor.binding.owner }, "Anchor requires owner code evidence")
+        anchor.resolution.dependencies.values.forEach { validateAnchor(it, anchor.binding.owner.apkSha256) }
+    }
+
+    private fun uniqueEvidence(values: List<KnowledgeEvidence>): List<KnowledgeEvidence> {
+        val grouped = values.groupBy { it.evidenceId }
+        requireInput(grouped.values.all { it.distinct().size == 1 }, "Conflicting evidence references in proof closure")
+        return grouped.toSortedMap().values.map { it.first() }
+    }
+
     private fun validate(value: VersionKnowledge) = checkedInput("knowledge contents") {
         requireInput(value.schemaVersion == SCHEMA_VERSION && value.kind == "version-knowledge", "Unsupported knowledge format")
         val ids = value.entries.map { it.semanticId } + value.unresolved.map { it.entry.semanticId }
         requireInput(ids.distinct().size == ids.size, "Duplicate semantic identity in knowledge")
         requireInput(value.entries.map { it.binding.descriptor }.distinct().size == value.entries.size, "Duplicate current class binding")
         requireInput(value.entries.map { Identities.renamedFullName(it.binding.descriptor, it.name) }.distinct().size == value.entries.size, "Duplicate confirmed class name")
+        requireInput(value.anchors.map { it.key }.distinct().size == value.anchors.size, "Duplicate anchor key")
+        value.anchors.forEach { validateAnchor(it, value.artifact.sha256) }
         value.entries.forEach {
-            requireInput(it.semanticId.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) && it.locators.isNotEmpty(), "Confirmed knowledge requires identity and locators")
+            requireInput(it.semanticId.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")), "Confirmed knowledge requires semantic identity")
             requireInput(it.binding.apkSha256 == value.artifact.sha256, "Confirmed binding belongs to another APK")
             Identities.renamedFullName(it.binding.descriptor, it.name)
             val rule = it.ruleRevision ?: throw ValidationException("Confirmed knowledge requires a rule revision")
@@ -105,6 +132,7 @@ object KnowledgeFiles {
             requireInput(rule.locators == it.locators && resolution.rule == rule, "Knowledge rule differs from its matching proof")
             requireInput(resolution.uniqueRef == it.binding, "Knowledge binding was not uniquely resolved")
             requireInput(it.evidence.any { evidence -> evidence.ref == it.binding }, "Confirmed knowledge requires owner code evidence")
+            resolution.dependencies.values.forEach { anchor -> validateAnchor(anchor, value.artifact.sha256) }
         }
         value.unresolved.forEach {
             requireInput(it.entry.semanticId.isNotBlank() && it.sourceKnowledgeId.isNotBlank() && it.reason.isNotBlank(), "Unresolved knowledge requires its last confirmed source")
