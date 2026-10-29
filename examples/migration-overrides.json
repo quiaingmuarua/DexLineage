@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "items": [
+    {
+      "semanticId": "replace-with-existing-semantic-id",
+      "locators": [
+        {
+          "kind": "string-use",
+          "anchor": "ExampleComponent#run"
+        }
+      ]
+    }
+  ]
+}

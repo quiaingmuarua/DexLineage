@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "caseId": "example",
+  "sourceApk": "old.apk",
+  "targetApk": "new.apk",
+  "sourceJadx": "old.apk.jadx",
+  "items": [
+    {
+      "id": "example-collector",
+      "sourceDescriptor": "La;",
+      "rule": {
+        "kind": "string",
+        "match": "exact",
+        "scope": "method_const_string",
+        "value": "example literal chosen from the source class"
+      }
+    }
+  ]
+}

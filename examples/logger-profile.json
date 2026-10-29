@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 3,
+  "id": "example-logger",
+  "discovery": {
+    "kind": "field-initializer",
+    "anchor": "ExampleDomain",
+    "factors": [
+      {
+        "kind": "field-flags",
+        "requiredFlags": [
+          "STATIC",
+          "FINAL"
+        ]
+      },
+      {
+        "kind": "invocation-kind",
+        "invocationKind": "STATIC"
+      },
+      {
+        "kind": "method-signature",
+        "parameterTypes": [
+          "Ljava/lang/String;",
+          "Ljava/lang/String;"
+        ],
+        "returnSameAsField": true
+      },
+      {
+        "kind": "argument-string",
+        "index": 0,
+        "value": "ExampleDomain"
+      },
+      {
+        "kind": "argument-string",
+        "index": 1
+      },
+      {
+        "kind": "assignment-owner"
+      }
+    ],
+    "captures": [
+      {
+        "name": "component",
+        "argumentIndex": 1
+      }
+    ]
+  },
+  "nameCapture": "component",
+  "locatorTemplate": {
+    "kind": "field-initializer",
+    "anchorFromCapture": "component",
+    "factors": [
+      {
+        "kind": "field-flags",
+        "requiredFlags": [
+          "STATIC",
+          "FINAL"
+        ]
+      },
+      {
+        "kind": "invocation-kind",
+        "invocationKind": "STATIC"
+      },
+      {
+        "kind": "method-signature",
+        "parameterTypes": [
+          "Ljava/lang/String;",
+          "Ljava/lang/String;"
+        ],
+        "returnSameAsField": true
+      },
+      {
+        "kind": "argument-string",
+        "index": 0
+      },
+      {
+        "kind": "argument-string",
+        "index": 1,
+        "valueFromCapture": "component"
+      },
+      {
+        "kind": "assignment-owner"
+      }
+    ],
+    "captures": [
+      {
+        "name": "component",
+        "argumentIndex": 1
+      }
+    ]
+  },
+  "minConfidence": "HIGH"
+}

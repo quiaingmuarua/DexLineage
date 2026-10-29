@@ -1,0 +1,991 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Independent oracle for self-authored APK integration regression fixtures; never passed to the production matcher.",
+  "packagePrefix": "dev.dexlineage.fixture.cases",
+  "loggerClass": "dev.dexlineage.fixture.support.FixtureLogger",
+  "expectedR8Version": "8.10.24",
+  "versions": {
+    "v1": {
+      "tag": "FixtureScopeV1",
+      "factoryClass": "dev.dexlineage.fixture.support.LoggerFactory",
+      "factoryMethod": "create",
+      "wrongSignatureMethod": "createCounted",
+      "apk": "fixtures/android/app/build/outputs/apk/v1/release/app-v1-release-unsigned.apk",
+      "mapping": "fixtures/android/app/build/outputs/mapping/v1Release/mapping.txt",
+      "configuration": "fixtures/android/app/build/outputs/mapping/v1Release/configuration.txt"
+    },
+    "v2": {
+      "tag": "FixtureScopeV2",
+      "factoryClass": "dev.dexlineage.fixture.support.LoggerFactory",
+      "factoryMethod": "build",
+      "wrongSignatureMethod": "buildCounted",
+      "apk": "fixtures/android/app/build/outputs/apk/v2/release/app-v2-release-unsigned.apk",
+      "mapping": "fixtures/android/app/build/outputs/mapping/v2Release/mapping.txt",
+      "configuration": "fixtures/android/app/build/outputs/mapping/v2Release/configuration.txt"
+    }
+  },
+  "cases": [
+    {
+      "id": "publicCache",
+      "component": "PublicCache",
+      "semanticAlias": "PublicCache",
+      "versions": {
+        "v1": {
+          "resolution": "UNIQUE",
+          "owners": [
+            "dev.dexlineage.fixture.cases.PublicCache"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.PublicCache"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.PublicCache",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "PublicCache"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "UNIQUE",
+          "owners": [
+            "dev.dexlineage.fixture.cases.PublicCache"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.PublicCache"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.PublicCache",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "PublicCache"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "privateCache",
+      "component": "PrivateCache",
+      "semanticAlias": "ReviewedPrivateCache",
+      "versions": {
+        "v1": {
+          "resolution": "UNIQUE",
+          "owners": [
+            "dev.dexlineage.fixture.cases.PrivateCache"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.PrivateCache"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.PrivateCache",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 26,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "PrivateCache"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "UNIQUE",
+          "owners": [
+            "dev.dexlineage.fixture.cases.PrivateCache"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.PrivateCache"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.PrivateCache",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 26,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "PrivateCache"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "removedSignal",
+      "component": "RetiredSignal",
+      "semanticAlias": "RetiredService",
+      "versions": {
+        "v1": {
+          "resolution": "UNIQUE",
+          "owners": [
+            "dev.dexlineage.fixture.cases.RetiredService"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.RetiredService"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.RetiredService",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "RetiredSignal"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.RetiredService"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.RetiredService",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "ReplacementSignal"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "becomesAmbiguous",
+      "component": "EvolvingService",
+      "semanticAlias": "EvolvingService",
+      "versions": {
+        "v1": {
+          "resolution": "UNIQUE",
+          "owners": [
+            "dev.dexlineage.fixture.cases.EvolvingService"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.EvolvingService"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.EvolvingService",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "EvolvingService"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "AMBIGUOUS",
+          "owners": [
+            "dev.dexlineage.fixture.cases.EvolvingService",
+            "dev.dexlineage.fixture.cases.EvolvingCompetitor"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.EvolvingService"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.EvolvingService",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "EvolvingService"
+                }
+              ],
+              "methodClues": []
+            },
+            {
+              "className": "dev.dexlineage.fixture.cases.EvolvingCompetitor",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "AlternateScopeV2",
+                  "component": "EvolvingService"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "alwaysAmbiguous",
+      "component": "SharedComponent",
+      "semanticAlias": "SharedComponent",
+      "versions": {
+        "v1": {
+          "resolution": "AMBIGUOUS",
+          "owners": [
+            "dev.dexlineage.fixture.cases.AmbiguousPrimary",
+            "dev.dexlineage.fixture.cases.AmbiguousSecondary"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.AmbiguousPrimary",
+            "dev.dexlineage.fixture.cases.AmbiguousSecondary"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.AmbiguousPrimary",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "SharedComponent"
+                }
+              ],
+              "methodClues": []
+            },
+            {
+              "className": "dev.dexlineage.fixture.cases.AmbiguousSecondary",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "SharedComponent"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "AMBIGUOUS",
+          "owners": [
+            "dev.dexlineage.fixture.cases.AmbiguousPrimary",
+            "dev.dexlineage.fixture.cases.AmbiguousSecondary"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.AmbiguousPrimary",
+            "dev.dexlineage.fixture.cases.AmbiguousSecondary"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.AmbiguousPrimary",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "SharedComponent"
+                }
+              ],
+              "methodClues": []
+            },
+            {
+              "className": "dev.dexlineage.fixture.cases.AmbiguousSecondary",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "SharedComponent"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "outsideScopeCollision",
+      "component": "ScopeCollision",
+      "semanticAlias": "ScopeCollision",
+      "versions": {
+        "v1": {
+          "resolution": "AMBIGUOUS",
+          "owners": [
+            "dev.dexlineage.fixture.cases.ScopeCollision",
+            "dev.dexlineage.fixture.cases.ExternalScopeCollision"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.ScopeCollision"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.ScopeCollision",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "ScopeCollision"
+                }
+              ],
+              "methodClues": []
+            },
+            {
+              "className": "dev.dexlineage.fixture.cases.ExternalScopeCollision",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "ExternalScope",
+                  "component": "ScopeCollision"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "AMBIGUOUS",
+          "owners": [
+            "dev.dexlineage.fixture.cases.ScopeCollision",
+            "dev.dexlineage.fixture.cases.ExternalScopeCollision"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.ScopeCollision"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.ScopeCollision",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "ScopeCollision"
+                }
+              ],
+              "methodClues": []
+            },
+            {
+              "className": "dev.dexlineage.fixture.cases.ExternalScopeCollision",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "ExternalScope",
+                  "component": "ScopeCollision"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "methodOnly",
+      "component": "MethodOnly",
+      "semanticAlias": "MethodOnly",
+      "versions": {
+        "v1": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.MethodOnly",
+              "loggerFields": [],
+              "methodClues": [
+                {
+                  "name": "describe",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "MethodOnly"
+                }
+              ]
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.MethodOnly",
+              "loggerFields": [],
+              "methodClues": [
+                {
+                  "name": "describe",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "MethodOnly"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nonFinal",
+      "component": "NonFinalField",
+      "semanticAlias": "NonFinalField",
+      "versions": {
+        "v1": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.NonFinalField",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 9,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "NonFinalField"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.NonFinalField",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 9,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "NonFinalField"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "instanceField",
+      "component": "InstanceField",
+      "semanticAlias": "InstanceField",
+      "versions": {
+        "v1": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.InstanceField",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 17,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "InstanceField"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.InstanceField",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 17,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "InstanceField"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wrongSignature",
+      "component": "WrongSignature",
+      "semanticAlias": "WrongSignature",
+      "versions": {
+        "v1": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.WrongSignature",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "createCounted",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;",
+                    "I"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "WrongSignature"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.WrongSignature",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "buildCounted",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;",
+                    "I"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "WrongSignature"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "crossFieldDecoy",
+      "component": "CrossFieldDecoy",
+      "semanticAlias": "CrossFieldDecoy",
+      "versions": {
+        "v1": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.CrossFieldDecoy",
+              "loggerFields": [
+                {
+                  "name": "STATIC_OTHER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "ExternalScope",
+                  "component": "OtherComponent"
+                },
+                {
+                  "name": "INSTANCE_CLUE",
+                  "flags": 17,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "CrossFieldDecoy"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "NO_MATCH",
+          "owners": [],
+          "discoveryOwners": [],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.CrossFieldDecoy",
+              "loggerFields": [
+                {
+                  "name": "STATIC_OTHER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "ExternalScope",
+                  "component": "OtherComponent"
+                },
+                {
+                  "name": "INSTANCE_CLUE",
+                  "flags": 17,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "CrossFieldDecoy"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "complexInitializer",
+      "component": "ComplexInitializer",
+      "semanticAlias": "ComplexInitializer",
+      "versions": {
+        "v1": {
+          "resolution": "UNKNOWN",
+          "owners": [
+            "dev.dexlineage.fixture.cases.ComplexInitializer"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.ComplexInitializer"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.ComplexInitializer",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "complex",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "ComplexInitializer"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "UNKNOWN",
+          "owners": [
+            "dev.dexlineage.fixture.cases.ComplexInitializer"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.ComplexInitializer"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.ComplexInitializer",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "complex",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "ComplexInitializer"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "unknownCompetitor",
+      "component": "UncertainComponent",
+      "semanticAlias": "UncertainComponent",
+      "versions": {
+        "v1": {
+          "resolution": "UNKNOWN",
+          "owners": [
+            "dev.dexlineage.fixture.cases.CertainTwin",
+            "dev.dexlineage.fixture.cases.UncertainTwin"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.CertainTwin",
+            "dev.dexlineage.fixture.cases.UncertainTwin"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.CertainTwin",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "UncertainComponent"
+                }
+              ],
+              "methodClues": []
+            },
+            {
+              "className": "dev.dexlineage.fixture.cases.UncertainTwin",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "complex",
+                  "factoryMethod": "create",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV1",
+                  "component": "UncertainComponent"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        },
+        "v2": {
+          "resolution": "UNKNOWN",
+          "owners": [
+            "dev.dexlineage.fixture.cases.CertainTwin",
+            "dev.dexlineage.fixture.cases.UncertainTwin"
+          ],
+          "discoveryOwners": [
+            "dev.dexlineage.fixture.cases.CertainTwin",
+            "dev.dexlineage.fixture.cases.UncertainTwin"
+          ],
+          "classes": [
+            {
+              "className": "dev.dexlineage.fixture.cases.CertainTwin",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "direct",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "UncertainComponent"
+                }
+              ],
+              "methodClues": []
+            },
+            {
+              "className": "dev.dexlineage.fixture.cases.UncertainTwin",
+              "loggerFields": [
+                {
+                  "name": "LOGGER",
+                  "flags": 25,
+                  "initializer": "complex",
+                  "factoryMethod": "build",
+                  "parameterTypes": [
+                    "Ljava/lang/String;",
+                    "Ljava/lang/String;"
+                  ],
+                  "category": "FixtureScopeV2",
+                  "component": "UncertainComponent"
+                }
+              ],
+              "methodClues": []
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

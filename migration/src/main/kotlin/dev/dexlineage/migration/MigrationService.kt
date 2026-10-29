@@ -1,0 +1,255 @@
+package dev.dexlineage.migration
+
+import dev.dexlineage.apk.ApkReader
+import dev.dexlineage.io.*
+import dev.dexlineage.knowledge.*
+import dev.dexlineage.mapping.MappingOutput
+import dev.dexlineage.model.*
+import dev.dexlineage.rules.RuleEngine
+import dev.dexlineage.rules.ResolutionEngine
+import dev.dexlineage.rules.RuleJson
+import com.google.gson.JsonParser
+import java.nio.file.Files
+import java.nio.file.Path
+import java.time.Instant
+
+object MigrationService {
+    fun prepare(knowledgePath: Path, sourceApkPath: Path, targetApkPath: Path, runDir: Path, minConfidence: Confidence = Confidence.HIGH, rulesPath: Path? = null): MigrationRun {
+        val knowledgeFile = Digests.artifact(knowledgePath)
+        val knowledge = KnowledgeFiles.read(knowledgePath)
+        val source = Digests.artifact(sourceApkPath)
+        val target = Digests.artifact(targetApkPath)
+        requireInput(source.sha256 == knowledge.artifact.sha256, "Source APK does not match VersionKnowledge")
+        val orderedEntries = knowledge.entries.sortedBy { it.semanticId }
+        requireInput(orderedEntries.all { it.semanticId.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) }, "Semantic IDs must be safe task IDs")
+        val rulesFile = rulesPath?.let(Digests::artifact)
+        val overrides = rulesPath?.let { readRules(it).items }.orEmpty()
+        val rules = effectiveRules(knowledge, overrides)
+        createNewDirectory(runDir)
+        try {
+            val sourceScan = ApkReader.scan(sourceApkPath, emptySet())
+            requireScan(sourceScan)
+            orderedEntries.forEach { requireInput(sourceScan.classes[it.binding.descriptor] == it.binding.dexEntry, "Source binding absent from source APK: ${it.semanticId}") }
+            val query = ResolutionEngine.execute(target, rules.values.toList(), runDir.resolve("work/target"))
+            requireScan(query.scan)
+            val tasks = orderedEntries.map { entry -> MigrationTask(entry.semanticId, entry, query.resolutions.getValue(rules.getValue(entry.semanticId).revisionId)) }
+            (listOf(source, target, knowledgeFile) + listOfNotNull(rulesFile)).forEach(Digests::verify)
+            var run = MigrationRun(runId = "", knowledgeFile = knowledgeFile, knowledge = knowledge, sourceApk = source, targetApk = target,
+                minConfidence = minConfidence, tasks = tasks, sourceInventory = sourceScan.classes.toSortedMap(), targetInventory = query.scan.classes.toSortedMap(),
+                sourceScan = sourceScan.stats, targetScan = query.scan.stats, analysisDiagnostics = query.analysis?.diagnostics.orEmpty(), analysisMillis = query.analysis?.elapsedMillis ?: 0,
+                createdAt = Instant.now().toString(), rulesFile = rulesFile, ruleOverrides = overrides.sortedBy { it.semanticId }, engineBuildId = ResolutionEngine.buildId())
+            run = run.copy(runId = run.fingerprint())
+            query.analysis?.code?.let { code ->
+                val refs = code.mapNotNull { c -> run.targetInventory[c.descriptor]?.let { ClassRef(target.sha256, c.descriptor, it) } }
+                EvidenceFiles.publish(runDir, run.runId, target, refs, code)
+            }
+            JsonFiles.writeNew(runDir.resolve("run.json"), run)
+            return run
+        } catch (e: Exception) {
+            if (!Files.exists(runDir.resolve("failure.json"))) JsonFiles.writeNew(runDir.resolve("failure.json"), mapOf("schemaVersion" to SCHEMA_VERSION, "operation" to "migration.prepare", "message" to (e.message ?: e.javaClass.name)))
+            throw e
+        }
+    }
+
+    fun readRun(dir: Path, verifyInputs: Boolean = true): MigrationRun = checkedInput("migration run") {
+        val run = JsonFiles.read(dir.resolve("run.json"), MigrationRun::class.java)
+        requireInput(run.kind == "migration-run" && run.toolVersion == TOOL_VERSION && run.jadxVersion == JADX_VERSION, "Unsupported migration run")
+        requireInput(run.runId == run.fingerprint(), "Migration run fingerprint mismatch")
+        requireInput(run.sourceScan.diagnostics.isEmpty() && run.targetScan.diagnostics.isEmpty(), "Incomplete migration scan")
+        requireInput(run.tasks.map { it.taskId }.distinct().size == run.tasks.size, "Duplicate migration tasks")
+        requireInput(run.sourceApk.sha256 == run.knowledge.artifact.sha256 && run.knowledge.knowledgeId == KnowledgeFiles.id(run.knowledge), "Run source knowledge identity mismatch")
+        requireInput(run.tasks.map { it.entry }.sortedBy { it.semanticId } == run.knowledge.entries.sortedBy { it.semanticId }, "Run tasks differ from frozen knowledge")
+        val rules = effectiveRules(run.knowledge, run.ruleOverrides)
+        requireInput(run.ruleOverrides.isEmpty() || run.rulesFile != null, "Rule overrides lack an input artifact")
+        run.tasks.forEach { task ->
+            requireInput(task.taskId == task.entry.semanticId && run.sourceInventory[task.entry.binding.descriptor] == task.entry.binding.dexEntry, "Invalid task source identity")
+            RuleProofs.validate(task.resolution)
+            requireInput(task.resolution.rule == rules.getValue(task.taskId), "Task differs from effective rule revision")
+            requireInput(task.resolution.engineBuildId == run.engineBuildId && task.resolution.apkSha256 == run.targetApk.sha256, "Resolution engine/APK mismatch")
+            task.resolution.matches.forEach { match ->
+                requireInput(run.targetInventory[match.owner.descriptor] == match.owner.dexEntry, "Resolution fact class/DEX identity mismatch")
+            }
+        }
+        if (verifyInputs) {
+            (listOf(run.sourceApk, run.targetApk, run.knowledgeFile) + listOfNotNull(run.rulesFile)).forEach(Digests::verify)
+            run.rulesFile?.let { requireInput(readRules(Path.of(it.path)).items.sortedBy { item -> item.semanticId } == run.ruleOverrides, "Rule input differs from frozen overrides") }
+            requireInput(KnowledgeFiles.read(Path.of(run.knowledgeFile.path)) == run.knowledge, "Frozen knowledge differs from input bundle")
+        }
+        run
+    }
+
+    fun tasks(dir: Path, state: String? = "UNREVIEWED", offset: Int = 0, limit: Int = 20): MigrationTasksPage {
+        val run = readRun(dir)
+        requireInput(offset >= 0 && limit > 0, "Expected non-negative offset and positive limit")
+        val requested = when (val normalized = (state ?: "UNREVIEWED").uppercase()) {
+            "ALL" -> null
+            else -> checkedInput("task state") { TaskState.valueOf(normalized) }
+        }
+        val decisions = currentDecisions(dir, run).associateBy { it.taskId }
+        val evidence = EvidenceFiles.available(dir, run.runId)
+        val views = run.tasks.sortedBy { it.taskId }.map { task ->
+            val decision = decisions.getValue(task.taskId)
+            val allowed = DecisionPolicy.allowedEvidence(run, task)
+            MigrationTaskView(task.taskId, task.entry.name, decision.state, decision.reason, task.entry.binding, task.entry.captures,
+                task.resolution, decision.revisionId, evidence.filter { it.ref in allowed }.map { it.evidenceId })
+        }.filter { requested == null || it.state == requested }
+        return MigrationTasksPage(runId = run.runId, total = views.size, offset = offset, limit = limit, tasks = views.drop(offset).take(limit), carriedUnresolved = run.knowledge.unresolved)
+    }
+
+    fun inspect(dir: Path, taskIds: Set<String>, selection: Map<String, Set<String>> = emptyMap()): List<EvidenceRecord> {
+        val run = readRun(dir)
+        requireInput(taskIds.isNotEmpty() && taskIds.all { id -> run.tasks.any { it.taskId == id } }, "Unknown or empty migration task IDs")
+        requireInput(selection.keys.all { it in taskIds }, "Selections must belong to requested tasks")
+        val requestedTasks = run.tasks.filter { it.taskId in taskIds }
+        val refs = linkedSetOf<ClassRef>()
+        requestedTasks.forEach { task ->
+            refs += task.entry.binding
+            refs += task.entry.evidence.filter { it.ref.apkSha256 == run.sourceApk.sha256 }.map { it.ref }
+            val chosen = selection[task.taskId]
+            if (chosen != null) requireInput(chosen.all { d -> task.candidates.any { it.ref.descriptor == d } }, "Non-candidate inspect selection")
+            task.candidates.filter { chosen == null || it.ref.descriptor in chosen }.forEach { candidate ->
+                refs += candidate.ref
+                candidate.matches.mapNotNull { it.field?.call?.declaringType }.forEach { factory -> run.targetInventory[factory]?.let { refs += ClassRef(run.targetApk.sha256, factory, it) } }
+            }
+        }
+        val available = EvidenceFiles.available(dir, run.runId).associateBy { it.ref }
+        val missing = refs.filter { it !in available }.toMutableSet()
+        val sourceRoot = Path.of(run.knowledgeFile.path).parent
+        val carried = requestedTasks.flatMap { it.entry.evidence }.filter { it.ref in missing && it.ref.apkSha256 == run.sourceApk.sha256 }.distinctBy { it.ref }
+        if (carried.isNotEmpty()) {
+            KnowledgeFiles.read(Path.of(run.knowledgeFile.path))
+            val code = carried.map { e -> DecompiledClass(e.ref.descriptor, Files.readString(sourceRoot.resolve(e.javaPath)), e.smaliPath?.let { Files.readString(sourceRoot.resolve(it)) }, e.incomplete, e.diagnostics, 0) }
+            EvidenceFiles.publish(dir, run.runId, run.sourceApk, carried.map { it.ref }, code)
+            missing.removeAll(carried.map { it.ref }.toSet())
+        }
+        for (artifact in listOf(run.sourceApk, run.targetApk).distinctBy { it.sha256 }) {
+            val batch = missing.filter { it.apkSha256 == artifact.sha256 }
+            if (batch.isEmpty()) continue
+            Digests.verify(artifact)
+            val code = ApkReader.decompile(Path.of(artifact.path), batch.map { it.descriptor }.toSet(), dir.resolve("work/inspect/${artifact.sha256}"))
+            EvidenceFiles.publish(dir, run.runId, artifact, batch, code)
+        }
+        listOf(run.sourceApk, run.targetApk, run.knowledgeFile).forEach(Digests::verify)
+        return refs.map { EvidenceFiles.read(dir, run.runId, Identities.evidenceId(run.runId, it)) }.sortedBy { it.evidenceId }
+    }
+
+    fun submit(dir: Path, reviewFile: Path): MigrationSubmission {
+        val run = readRun(dir)
+        rejectLegacyReviewFields(reviewFile)
+        val batch = JsonFiles.read(reviewFile, MigrationReviewBatch::class.java)
+        checkedInput("migration review batch") {
+            requireInput(batch.runId == run.runId && batch.sourceKnowledgeId == run.knowledge.knowledgeId, "Review belongs to another run or knowledge revision")
+            requireInput(batch.sourceApkSha256 == run.sourceApk.sha256 && batch.targetApkSha256 == run.targetApk.sha256, "Review APK identity mismatch")
+            requireInput(batch.items.map { it.taskId }.distinct().size == batch.items.size, "Duplicate review tasks")
+            requireInput(batch.items.isNotEmpty(), "Empty review batch")
+            val evidence = EvidenceFiles.available(dir, run.runId).associateBy { it.evidenceId }
+            batch.items.forEach { review ->
+                val task = run.tasks.singleOrNull { it.taskId == review.taskId } ?: throw ValidationException("Unknown task: ${review.taskId}")
+                DecisionPolicy.validateReview(run, task, review, evidence)
+            }
+        }
+        val revisions = ReviewStore.submitBatch(dir, run.runId, batch.items.sortedBy { it.taskId }.map { ReviewRequest(it.taskId, it.supersedes, it) })
+            .associate { it.taskId to it.revisionId }
+        return MigrationSubmission(runId = run.runId, revisions = revisions, decisions = currentDecisions(dir, run))
+    }
+
+    fun publish(dir: Path, out: Path, reviewSnapshot: Path? = null): MigrationPublication {
+        val run = readRun(dir)
+        val reviews = if (reviewSnapshot == null) ReviewStore.latest(dir, run.runId) else ReviewStore.fromSnapshot(dir, run.runId, reviewSnapshot)
+        val decisions = decisions(dir, run, reviews)
+        val sourceRoot = Path.of(run.knowledgeFile.path).parent
+        KnowledgeFiles.read(Path.of(run.knowledgeFile.path))
+        createNewDirectory(out)
+        val entries = mutableListOf<KnowledgeEntry>()
+        val unresolved = run.knowledge.unresolved.map { old -> old.copy(entry = copyEntry(old.entry, sourceRoot, out)) }.toMutableList()
+        for (decision in decisions) {
+            val task = run.tasks.single { it.taskId == decision.taskId }
+            if (decision.state == TaskState.ACCEPTED) {
+                val review = decision.review!!
+                val ids = review.evidenceIds.distinct().sorted()
+                val evidence = ids.map { EvidenceFiles.export(dir, run.runId, it, out) }
+                entries += task.entry.copy(binding = decision.target!!, evidence = evidence, rationale = review.identityReason,
+                    captures = RuleProofs.captures(task.resolution), locators = task.resolution.rule.locators,
+                    ruleRevision = task.resolution.rule, resolution = task.resolution,
+                    provenance = "migration:${run.runId}:${decision.revisionId}")
+            } else {
+                val explanation = decision.review?.let { "${decision.reason}: ${it.identityReason}" } ?: decision.reason
+                unresolved += UnresolvedKnowledge(copyEntry(task.entry, sourceRoot, out), run.knowledge.knowledgeId, explanation, dir.toAbsolutePath().normalize().toString())
+            }
+        }
+        val knowledge = KnowledgeFiles.write(out, VersionKnowledge(knowledgeId = "", artifact = run.targetApk, entries = entries, unresolved = unresolved,
+            provenance = "migration:${run.runId}", parentKnowledgeId = run.knowledge.knowledgeId))
+        MappingOutput.write(out.resolve("mapping.tiny"), knowledge.entries.map { AcceptedRename(it.binding.descriptor, Identities.renamedFullName(it.binding.descriptor, it.name)) })
+        val cachedEvidence = EvidenceFiles.available(dir, run.runId)
+        val javaPaths = cachedEvidence.map { dir.resolve(it.javaPath) }.distinct()
+        val smaliPaths = cachedEvidence.mapNotNull { it.smaliPath?.let(dir::resolve) }.distinct()
+        val evidenceMetrics = mapOf("scope" to "emitted_or_cached_evidence", "agentReadsMeasured" to false,
+            "ownerApkPairs" to cachedEvidence.map { it.ref.apkSha256 to it.ref.descriptor }.distinct().size,
+            "apkCount" to cachedEvidence.map { it.ref.apkSha256 }.distinct().size,
+            "javaFiles" to javaPaths.size, "javaLines" to javaPaths.sumOf { Files.lines(it).use { lines -> lines.count() } }, "javaBytes" to javaPaths.sumOf(Files::size),
+            "smaliFiles" to smaliPaths.size, "smaliLines" to smaliPaths.sumOf { Files.lines(it).use { lines -> lines.count() } }, "smaliBytes" to smaliPaths.sumOf(Files::size),
+            "incompleteClasses" to cachedEvidence.count { it.incomplete })
+        JsonFiles.writeNew(out.resolve("report.json"), mapOf("schemaVersion" to SCHEMA_VERSION, "kind" to "migration-report", "runId" to run.runId,
+            "sourceKnowledgeId" to run.knowledge.knowledgeId, "knowledgeId" to knowledge.knowledgeId, "sourceApk" to run.sourceApk, "targetApk" to run.targetApk,
+            "reviewRevisions" to reviews.mapValues { it.value.revisionId }, "evidenceMetrics" to evidenceMetrics,
+            "engineBuildId" to run.engineBuildId, "rulesFile" to run.rulesFile, "ruleOverrides" to run.ruleOverrides,
+            "resolutions" to ResolutionStatus.entries.associateWith { state -> run.tasks.count { it.resolution.status == state } },
+            "sourceScan" to run.sourceScan, "targetScan" to run.targetScan, "analysisMillis" to run.analysisMillis, "analysisDiagnostics" to run.analysisDiagnostics,
+            "tasks" to run.tasks, "decisions" to decisions, "carriedUnresolved" to run.knowledge.unresolved.size, "accepted" to entries.size, "unresolved" to unresolved.size,
+            "counts" to mapOf("tasks" to run.tasks.size, "candidates" to run.tasks.sumOf { it.candidates.size },
+                "matches" to MatchStatus.entries.associateWith { state -> run.tasks.sumOf { task -> task.matches.count { it.status == state } } },
+                "conditions" to MatchStatus.entries.associateWith { state -> run.tasks.sumOf { task -> task.matches.sumOf { m -> m.factors.count { it.status == state } } } },
+                "reviews" to TaskState.entries.associateWith { state -> decisions.count { it.state == state } })))
+        return MigrationPublication(runId = run.runId, knowledgeId = knowledge.knowledgeId, outputDirectory = out.toAbsolutePath().toString(), accepted = entries.size, unresolved = unresolved.size, decisions = decisions)
+    }
+
+    internal fun currentDecisions(dir: Path, run: MigrationRun): List<MigrationDecision> = decisions(dir, run, ReviewStore.latest(dir, run.runId))
+    private fun decisions(dir: Path, run: MigrationRun, latest: Map<String, StoredReview>): List<MigrationDecision> = checkedInput("migration review history") {
+        val reviews = latest.mapValues { (_, stored) -> stored.revisionId to JsonFiles.gson.fromJson(stored.payload, MigrationReview::class.java) }
+        val evidence = EvidenceFiles.available(dir, run.runId).associateBy { it.evidenceId }
+        DecisionPolicy.decide(run, reviews, evidence)
+    }
+    internal fun readRules(path: Path): MigrationRulesFile = checkedInput("migration rules file") {
+        val raw = JsonParser.parseString(Files.readString(path)).asJsonObject
+        requireInput(raw.keySet().all { it in setOf("schemaVersion", "items") }, "Unknown migration rules file property")
+        val items = raw.get("items")
+        requireInput(items != null && items.isJsonArray, "Migration rules require an items array")
+        items.asJsonArray.forEach { element ->
+            requireInput(element.isJsonObject, "Migration rule item must be an object")
+            val item = element.asJsonObject
+            requireInput(item.keySet().all { it in setOf("semanticId", "locators", "expectedRevision") }, "Unknown migration rule item property")
+            val semanticId = item.get("semanticId")
+            requireInput(semanticId != null && semanticId.isJsonPrimitive && semanticId.asJsonPrimitive.isString, "Migration rule semanticId must be a string")
+            item.get("expectedRevision")?.takeUnless { it.isJsonNull }?.let { requireInput(it.isJsonPrimitive && it.asJsonPrimitive.isString, "expectedRevision must be a string") }
+            RuleJson.validateLocators(item.get("locators") ?: throw ValidationException("Missing rule locators"))
+        }
+        JsonFiles.read(path, MigrationRulesFile::class.java)
+    }
+    internal fun effectiveRules(knowledge: VersionKnowledge, overrides: List<MigrationRuleOverride>): Map<String, RuleRevision> = checkedInput("migration rule overrides") {
+        requireInput(overrides.map { it.semanticId }.distinct().size == overrides.size, "Duplicate rule override targets")
+        val entries = knowledge.entries.associateBy { it.semanticId }
+        overrides.forEach { change ->
+            val entry = entries[change.semanticId] ?: throw ValidationException("Rule override adds unknown semantic target: ${change.semanticId}")
+            requireInput(change.expectedRevision == null || change.expectedRevision == entry.ruleRevision?.revisionId, "Rule override expectedRevision does not match source knowledge")
+            change.locators.forEach(RuleEngine::validate)
+            RuleProofs.revision(change.locators)
+        }
+        val changes = overrides.associateBy { it.semanticId }
+        entries.mapValues { (id, entry) ->
+            val revision = changes[id]?.let { RuleProofs.revision(it.locators) } ?: requireNotNull(entry.ruleRevision) { "Missing current rule revision" }
+            RuleProofs.validate(revision)
+            revision.locators.forEach(RuleEngine::validate)
+            revision
+        }.toSortedMap()
+    }
+    private fun rejectLegacyReviewFields(path: Path) = checkedInput("migration review fields") {
+        val raw = JsonParser.parseString(Files.readString(path)).asJsonObject
+        raw.getAsJsonArray("items")?.forEach { item ->
+            val obj = item.asJsonObject
+            requireInput(listOf("targetDescriptor", "candidateComparisons", "name", "alias", "semanticName").none(obj::has),
+                "Migration Review cannot select an entity, compare away candidates, or change the name; bind resolutionId and ruleRevisionId")
+        }
+    }
+    private fun copyEntry(entry: KnowledgeEntry, sourceRoot: Path, out: Path) = entry.copy(evidence = entry.evidence.map { KnowledgeFiles.copyEvidence(sourceRoot, out, it) })
+    private fun requireScan(scan: ScanResult) { if (scan.stats.diagnostics.isNotEmpty()) throw ExecutionException("DEX scan incomplete: ${scan.stats.diagnostics.joinToString("; ")}") }
+}

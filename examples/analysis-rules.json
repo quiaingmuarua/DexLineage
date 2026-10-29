@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 3,
+  "kind": "analysis-rules",
+  "minConfidence": "HIGH",
+  "items": [
+    {
+      "key": "example-component",
+      "proposedName": "ExampleComponent",
+      "locators": [
+        {
+          "kind": "string-use",
+          "anchor": "ExampleComponent#run"
+        }
+      ]
+    }
+  ]
+}

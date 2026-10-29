@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jvm:
+    name: JVM (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - name: Build and test JVM modules
+        shell: bash
+        run: ./gradlew --no-daemon build installDist
+      - name: Check installed launcher and notices
+        shell: bash
+        run: |
+          build/install/dexlineage/bin/dexlineage --version
+          build/install/dexlineage/bin/dexlineage --help
+          test -s build/install/dexlineage/LICENSE
+          test -s build/install/dexlineage/THIRD_PARTY_NOTICES.md
+          test -s build/install/dexlineage/licenses/smali-LICENSE.txt
+      - name: Upload JVM test reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: jvm-reports-${{ matrix.os }}
+          retention-days: 14
+          path: |
+            */build/reports/tests/**
+            */build/test-results/**
+
+  apk-integration:
+    name: R8 APK and production CLI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - name: Install pinned Android SDK components
+        shell: bash
+        run: |
+          test -n "$ANDROID_HOME"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build R8 fixtures and run CLI integration regressions
+        shell: bash
+        run: ./gradlew --no-daemon fixtureIntegrationTest
+      - name: Upload public fixture diagnostics
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: fixture-integration-diagnostics
+          retention-days: 14
+          path: |
+            cli/build/reports/tests/fixtureIntegrationTest/**
+            cli/build/test-results/fixtureIntegrationTest/**
+            cli/build/fixture-integration/**
+            fixtures/android/app/build/outputs/apk/**
+            fixtures/android/app/build/outputs/mapping/**
+            fixtures/android/build/reports/**

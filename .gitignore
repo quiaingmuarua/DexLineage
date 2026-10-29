@@ -1,0 +1,14 @@
+.gradle/
+.kotlin/
+build/
+.local/
+/.runtime/
+.idea/
+*.iml
+local.properties
+*.apk
+*.dex
+*.jadx
+*.jks
+*.keystore
+null/

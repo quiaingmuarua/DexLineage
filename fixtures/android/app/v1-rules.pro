@@ -1,0 +1,3 @@
+-classobfuscationdictionary dictionaries/v1-names.txt
+-obfuscationdictionary dictionaries/v1-names.txt
+-packageobfuscationdictionary dictionaries/v1-names.txt
