@@ -172,6 +172,18 @@ class MultiRoundIntegrationTest {
         cli.execute("source-is-not-target-base", "migration", "prepare", "--knowledge", sourceOut.resolve("knowledge.json"),
             "--source-apk", apk("v1"), "--target-apk", apk("v2"), "--target-base", sourceOut.resolve("knowledge.json"),
             "--run", cli.output.resolve("wrong-target-base"), expectedExit = 2)
+        val broken = cli.output.resolve("broken-ancestor-package")
+        Files.walk(sourceOut).use { paths -> paths.forEach { path ->
+            val copy = broken.resolve(sourceOut.relativize(path))
+            if (Files.isDirectory(path)) Files.createDirectories(copy) else Files.copy(path, copy)
+        } }
+        val ancestor = source.anchors.single { it.key == "factory" }.resolution.dependencies.getValue("owner").evidence.first()
+        Files.delete(broken.resolve(ancestor.javaPath))
+        cli.execute("missing-ancestor-evidence", "knowledge", "verify", "--knowledge", broken.resolve("knowledge.json"),
+            "--apk", apk("v1"), "--work", cli.output.resolve("missing-ancestor-readback"), expectedExit = 2)
+        Files.writeString(broken.resolve(ancestor.javaPath), "changed ancestor evidence")
+        cli.execute("changed-ancestor-evidence", "analysis", "prepare", "--apk", apk("v1"), "--rules", rules,
+            "--base-knowledge", broken.resolve("knowledge.json"), "--run", cli.output.resolve("bad-ancestor-run"), expectedExit = 2)
 
         base = null
         for (round in 1..3) {
