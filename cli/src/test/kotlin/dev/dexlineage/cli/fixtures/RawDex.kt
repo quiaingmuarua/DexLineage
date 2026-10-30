@@ -20,7 +20,8 @@ data class RawDexInstruction(val opcode: Opcode, val offset: Int, val regs: List
     val literal: String?, val method: RawDexMethodRef?, val fieldOwner: String?, val fieldName: String?, val fieldType: String?)
 data class RawDexMethod(val ref: RawDexMethodRef, val flags: Int, val instructions: List<RawDexInstruction>)
 data class RawDexClass(val descriptor: String, val dexEntry: String, val sourceFiles: List<String>,
-    val fields: List<RawDexField>, val methods: List<RawDexMethod>)
+    val fields: List<RawDexField>, val methods: List<RawDexMethod>, val accessFlags: Int = 0,
+    val superType: String? = null, val interfaces: List<String> = emptyList())
 data class RawDexIndex(val apkSha256: String, val classes: Map<String, RawDexClass>)
 
 /** Test-side raw input only: no production matcher, saved Resolution, Java rendering or rename map. */
@@ -75,7 +76,7 @@ object RawDex {
                             method.accessFlags, instructions.toList())
                     })
                     val clazz = RawDexClass(cls.type, dexEntry, cls.attributes.filterIsInstance<SourceFileAttr>().map { it.fileName },
-                        fields.toList(), methods.toList())
+                        fields.toList(), methods.toList(), cls.accessFlags, cls.superType, cls.interfacesTypes.toList())
                     check(classes.put(cls.type, clazz) == null) { "Duplicate fixture class ${cls.type}" }
                 }
             }

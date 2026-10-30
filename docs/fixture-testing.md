@@ -47,6 +47,8 @@ The multi-round fixture additionally uses self-authored logger, Handler and RPC 
 - anchors publishing without Review but never entering Tiny, followed by reviewed class publication in later subprocess rounds;
 - target-version anchors being resolved again, target-base continuation, stale dependency evidence rejection and same-APK knowledge preservation.
 
+The related-RPC suite adds a two-round publication and migration flow for descriptor/builder/marshaller class roles. It covers `Object`-returning outer methods, declared interfaces versus concrete implementations, multiple complete constructions, and a uniquely identified method whose additional unknown construction must block downstream publication. The corpus research command is exercised on unconfigured targets; its evidence cannot be used as a matching-run Review. All published results use the same raw DEX consumption, R8 oracle assertions and independent JADX readback as the other suites.
+
 CLASS and METHOD use separate entity identities. Assertions for methods compare the full original owner/name/signature obtained from the test oracle; checking only an owner class would miss incorrect method deduplication. Fixture semantics remain predetermined, and no public test has a private Messages target count or path.
 
 Do not assert complete decompiled Java text, instruction offsets or APK hashes across builds. Assert identity, structure, captures, Resolution, review decisions and name application. APK digests still bind each actual run to its actual input.

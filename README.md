@@ -93,6 +93,14 @@ The corpus preserves class, field, method and local annotations. Class annotatio
 
 An Analysis rule item can refer to a corpus target using `corpusTargetId`. Pass `--corpus` to `analysis prepare`; `analysis targets --corpus ... --run ...` shows every manual target, including `UNCONFIGURED` items and failures. New discoveries outside the corpus are reported separately.
 
+Investigate selected manual targets before writing rules:
+
+```powershell
+& $cli analysis research --corpus .local\manual-corpus\corpus.json --target 'manual-target-id-1,manual-target-id-2' --out .local\research-001
+```
+
+Research reads the corpus's frozen source APK and preserves owner annotations alongside raw class/member identities, strings, direct calls, field accesses and Java/Smali evidence. It batches selected targets, does not recursively explore relationships, and writes `research.json` without creating a matching run. Research can help author a rule; it is not a Resolution, and its evidence cannot be submitted as another run's Review. A partial Java rendering remains explicit while raw DEX reading failures abort the operation.
+
 Copy [the multi-round example](examples/multiround-rules.json) and replace its public marker/component strings with observed inputs. It defines a logger class anchor, a current-version factory METHOD anchor and a class target that uses that factory:
 
 ```powershell
@@ -106,6 +114,8 @@ Copy [the multi-round example](examples/multiround-rules.json) and replace its p
 Continue with a new run and the latest base until the required class tasks are ready for `inspect / submit / publish`. This example needs another round before the class can use its newly published factory. `prepare` never consumes anchors created within that same execution. Missing resolved prerequisites are `WAITING_DEPENDENCY`, with no fabricated Resolution. `inspect --task 'anchor:logger-factory'` reads an anchor's code; ordinary task IDs read class candidates and their dependency evidence.
 
 The compile-time registry provides Messages-oriented logger, Handler-name and RPC/Proto strategies. They take configuration and structured APK facts, not hardcoded obfuscated answers. [The RPC example](examples/rpc-rules.json) demonstrates one descriptor METHOD anchor feeding request and response class targets. Real application tags, service lists and manual names belong in `.local`; the strategy code and self-authored fixtures are public.
+
+[RPC related-type rules](examples/rpc-related-rules.json) use the same verified METHOD anchor to locate the constructed descriptor, its builder, and the common marshaller declaration interface. Service, RPC and label settings come from the producer rule. The strategy reads the actual construction, including when the outer RPC method returns `Object`; it does not name the outer method's return type or the concrete marshaller implementation by assumption. Any unresolved competing construction keeps related-type results UNKNOWN even when the enclosing method is unique. This takes two rounds: publish the RPC method anchor, then match and review class targets.
 
 ## Continue Analysis on existing knowledge
 
@@ -145,6 +155,8 @@ Source anchors supply rule definitions, not target-version bindings. Migration r
 ```
 
 The target base must belong to that same source knowledge and target APK. It preserves earlier target confirmations while enabling later dependency rounds; it does not replace the frozen source target set.
+
+Extending source knowledge changes its knowledge ID. An earlier migration's target package cannot be used as the target base for that new source revision. A bounded experiment may publish an independent subset package and migrate it separately; this does not merge its results into the existing complete package. New strategy builds also change the implementation fingerprint, so freeze the build before reviewing fresh dependency rounds.
 
 Supply an [override file](examples/migration-overrides.json) with `migration prepare --rules ...` and a new run directory to revise rules. Each override replaces that target's entire active locator set; unlisted targets keep their rules. Unknown semantic IDs are rejected. A target-version rule need not match the source APK. Accepted migration publishes the rule revision actually used for the new binding.
 

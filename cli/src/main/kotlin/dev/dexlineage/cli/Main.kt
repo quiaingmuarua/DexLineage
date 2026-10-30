@@ -1,6 +1,7 @@
 package dev.dexlineage.cli
 
 import dev.dexlineage.analysis.AnalysisService
+import dev.dexlineage.analysis.ResearchService
 import dev.dexlineage.migration.MigrationService
 import dev.dexlineage.io.*
 import dev.dexlineage.knowledge.KnowledgeFiles
@@ -12,6 +13,7 @@ import kotlin.system.exitProcess
 private const val HELP = """DexLineage 0.4.0
   analysis import-jadx --apk <apk> --project <project.jadx> --out <new-directory>
   analysis targets   --corpus <corpus.json> [--run <directory>] [--state ...] [--offset N] [--limit N]
+  analysis research  --corpus <corpus.json> --target <target-id,...> --out <new-directory>
   analysis discover  --apk <apk> --profile <profile.json> --out <new-directory> [--base-knowledge <knowledge.json>]
   analysis prepare   --apk <apk> --rules <rules.json> --run <new-directory> [--corpus <corpus.json>] [--base-knowledge <knowledge.json>]
   analysis tasks     --run <directory> [--state UNREVIEWED|ACCEPTED|REJECTED|DEFERRED|INVALID|ALL] [--offset N] [--limit N]
@@ -43,6 +45,7 @@ fun runCli(args: Array<String>): Int = try {
             val allowed = when ("$scene $operation") {
                 "analysis import-jadx" -> setOf("--apk", "--project", "--out")
                 "analysis targets" -> setOf("--corpus", "--run", "--state", "--offset", "--limit")
+                "analysis research" -> setOf("--corpus", "--target", "--out")
                 "analysis discover" -> setOf("--apk", "--profile", "--out", "--base-knowledge")
                 "analysis prepare" -> setOf("--apk", "--rules", "--run", "--base-knowledge", "--corpus")
                 "analysis tasks", "migration tasks" -> setOf("--run", "--state", "--offset", "--limit")
@@ -82,6 +85,7 @@ fun runCli(args: Array<String>): Int = try {
             val result: Any = when ("$scene $operation") {
                 "analysis import-jadx" -> AnalysisService.importJadx(path("--apk"), path("--project"), path("--out"))
                 "analysis targets" -> AnalysisService.targets(path("--corpus"), options["--run"]?.single()?.let(Path::of), options["--state"]?.single(), number("--offset", 0), number("--limit", 20))
+                "analysis research" -> ResearchService.research(path("--corpus"), value("--target").split(',').map(String::trim), path("--out"))
                 "analysis discover" -> AnalysisService.discover(path("--apk"), path("--profile"), path("--out"), options["--base-knowledge"]?.single()?.let(Path::of))
                 "analysis prepare" -> AnalysisService.prepare(path("--apk"), path("--rules"), path("--run"), options["--base-knowledge"]?.single()?.let(Path::of), options["--corpus"]?.single()?.let(Path::of)).let {
                     mapOf("runId" to it.runId, "run" to path("--run").toAbsolutePath().toString(), "tasks" to it.tasks.size,

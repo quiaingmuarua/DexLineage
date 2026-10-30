@@ -1,16 +1,24 @@
 package dev.dexlineage.rules.recipes
 
 import dev.dexlineage.model.*
+import dev.dexlineage.io.ExecutionException
 import dev.dexlineage.rules.string
 import dev.dexlineage.rules.facts.*
 import dev.dexlineage.rules.facts.DexFactSession.*
 
 /** Finite descriptor construction shapes, with roles obtained from labels and constructor assignments. */
 internal object RpcRecipe {
-    private data class Binding(val method: MethodId, val request: String, val response: String, val related: Set<String>, val offset: Int)
+    internal data class Binding(val method: MethodId, val request: String, val response: String,
+        val descriptorType: String, val builderType: String,
+        val requestDeclarationType: String, val responseDeclarationType: String,
+        val requestImplementationType: String, val responseImplementationType: String,
+        val related: Set<String>, val offset: Int)
     private data class Inspection(val bindings: List<Binding>, val unknown: Boolean, val detail: String)
+    private data class Marshaller(val messageType: String, val implementationType: String, val related: Set<String>)
+    internal data class RelatedType(val type: String, val status: MatchStatus, val binding: Binding, val detail: String)
 
     fun execute(s: DexFactSession, rule: RuleRevision, dependencies: Map<String, SupportAnchor>): List<MatchFact> {
+        if (rule.strategyId == "messages.rpc-related-type") return relatedTypes(s, rule, dependencies.getValue("descriptor"))
         val service = rule.parameters.string("service")!!; val rpc = rule.parameters.string("rpc")!!
         val methods = if (rule.strategyId == "messages.rpc-message") {
             val ref = dependencies.getValue("descriptor").binding.method!!
@@ -45,6 +53,57 @@ internal object RpcRecipe {
             }
         }
         return result
+    }
+
+    private fun relatedTypes(s: DexFactSession, rule: RuleRevision, anchor: SupportAnchor): List<MatchFact> {
+        // The producer's immutable rule is the only authority for service/RPC and effective labels.
+        val producer = anchor.rule
+        val service = producer.parameters.string("service")!!
+        val rpc = producer.parameters.string("rpc")!!
+        val method = s.method(anchor.binding.method!!) ?: throw ExecutionException("RPC dependency method cannot be reread from its APK")
+        val inspected = inspect(s, producer, method, service, rpc)
+        val role = rule.parameters.string("role")!!
+        return selectRelatedTypes(inspected.bindings, inspected.unknown, role,
+            { type -> (s.classes[type]?.flags ?: 0) and 0x200 != 0 }, s::isSubtype).map { selected ->
+            val binding = selected.binding
+            if (selected.type !in s.classes) throw ExecutionException("RPC dependency construction references an unavailable role type: ${selected.type}")
+            val related = binding.related + method.id.owner + listOf(binding.descriptorType, binding.builderType,
+                binding.requestDeclarationType, binding.responseDeclarationType,
+                binding.requestImplementationType, binding.responseImplementationType)
+            MessagesRecipes.fact(s, selected.type, selected.status, "rpc-related-type", selected.detail,
+                captures = mapOf("service" to service, "rpc" to rpc, "role" to role,
+                    "descriptorType" to binding.descriptorType, "builderType" to binding.builderType,
+                    "requestDeclarationType" to binding.requestDeclarationType, "responseDeclarationType" to binding.responseDeclarationType,
+                    "requestImplementationType" to binding.requestImplementationType, "responseImplementationType" to binding.responseImplementationType),
+                related = related.toList(), source = method.id, offset = binding.offset)
+        }
+    }
+
+    /** Method uniqueness does not establish completeness of its internal construction paths. */
+    internal fun selectRelatedTypes(bindings: List<Binding>, incomplete: Boolean, role: String,
+        isInterface: (String) -> Boolean, isSubtype: (String, String) -> Boolean): List<RelatedType> {
+        if (bindings.isEmpty()) throw ExecutionException("RPC dependency proof cannot reproduce any complete descriptor construction")
+        val invalidMarshaller = role == "marshaller" && bindings.any { binding ->
+            binding.requestDeclarationType != binding.responseDeclarationType || !isInterface(binding.requestDeclarationType) ||
+                !isSubtype(binding.requestImplementationType, binding.requestDeclarationType) ||
+                !isSubtype(binding.responseImplementationType, binding.responseDeclarationType)
+        }
+        // Never append UNKNOWN next to PASS for one class: normal entity deduplication prefers PASS.
+        val unknown = incomplete || invalidMarshaller
+        val detail = when {
+            incomplete -> "An RPC construction path is unresolved; all known related types remain unknown"
+            invalidMarshaller -> "RPC marshaller fields do not establish one common declared interface with compatible implementations"
+            else -> "Related type is bound to the verified RPC descriptor construction"
+        }
+        return bindings.flatMap { binding ->
+            val targets = when (role) {
+                "descriptor" -> listOf(binding.descriptorType)
+                "builder" -> listOf(binding.builderType)
+                "marshaller" -> listOf(binding.requestDeclarationType, binding.responseDeclarationType).distinct()
+                else -> error("Unvalidated RPC related type role: $role")
+            }
+            targets.map { RelatedType(it, if (unknown) MatchStatus.UNKNOWN else MatchStatus.PASS, binding, detail) }
+        }
     }
 
     private fun inspect(s: DexFactSession, rule: RuleRevision, method: Method, service: String, rpc: String): Inspection {
@@ -99,9 +158,11 @@ internal object RpcRecipe {
                         val req = defaultType(s, requestValue, build.constructions, 1)
                         val res = defaultType(s, responseValue, build.constructions, 1)
                         if (req == null || res == null) { unknown = true; continue }
-                        val related = linkedSetOf(descriptor, build.method.owner, constructor.method.owner, name.method.owner, req.first, res.first)
-                        related += req.second; related += res.second
-                        bindings += Binding(method.id, req.first, res.first, related.filter { it in s.classes }.toSet(), name.offset)
+                        val related = linkedSetOf(descriptor, build.method.owner, constructor.method.owner, name.method.owner, req.messageType, res.messageType)
+                        related += req.related; related += res.related
+                        bindings += Binding(method.id, req.messageType, res.messageType, descriptor, build.method.owner,
+                            labels.getValue("request").type, labels.getValue("response").type,
+                            req.implementationType, res.implementationType, related.filter { it in s.classes }.toSet(), name.offset)
                     }
                 }
             }
@@ -135,12 +196,12 @@ internal object RpcRecipe {
         }
     }
 
-    private fun defaultType(s: DexFactSession, value: Value?, constructions: Map<Value, CallEvent>, depth: Int): Pair<String, Set<String>>? {
+    private fun defaultType(s: DexFactSession, value: Value?, constructions: Map<Value, CallEvent>, depth: Int): Marshaller? {
         when (value) {
             is Value.Allocation -> {
                 val constructor = constructions[value] ?: return null
                 val defaults = constructor.args.mapNotNull { defaultInstance(s, it) }.distinct()
-                return defaults.singleOrNull()?.let { it to setOf(value.type, constructor.method.owner) }
+                return defaults.singleOrNull()?.let { Marshaller(it, value.type, setOf(value.type, constructor.method.owner)) }
             }
             is Value.Invocation -> {
                 if (depth <= 0 || value.receiver != null) return null
@@ -152,7 +213,7 @@ internal object RpcRecipe {
                     (argument as? Value.Parameter)?.takeIf { it.index >= 0 }?.let { value.args.getOrNull(it.index) } ?: argument
                 }
                 val defaults = supplied.mapNotNull { defaultInstance(s, it) }.distinct()
-                return defaults.singleOrNull()?.let { it to setOf(value.method.owner, allocation.type) }
+                return defaults.singleOrNull()?.let { Marshaller(it, allocation.type, setOf(value.method.owner, allocation.type)) }
             }
             else -> return null
         }

@@ -388,9 +388,7 @@ object MigrationService {
     private fun validateDependencyDefinitions(targets: List<RuleRevision>, definitions: Map<String, RuleRevision>) {
         RuleProofs.validateDependencies(definitions, targets, emptyList())
         (targets + definitions.values).forEach { rule ->
-            StrategyRegistry.dependencyKinds(rule).forEach { (role, expected) ->
-                requireInput(definitions.getValue(rule.requires.getValue(role)).resultKind == expected, "Dependency $role has a different result kind")
-            }
+            StrategyRegistry.validateDependencyDefinitions(rule, definitions)
         }
     }
 
