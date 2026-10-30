@@ -124,6 +124,26 @@ final class ThemeRpcCases {
         config.put(ThemeDescriptor.name("fixture.theme.Group", "ConfigurationOnly"), "configuration-value");
         return config;
     }
+    // Real configuration-parser shape: nested lookups exceed the bounded value-expression depth.
+    static Object deepConfiguration(java.util.Map<String, Object> input) {
+        java.util.Map<?, ?> section = (java.util.Map<?, ?>) input.get("methodConfig");
+        java.util.List<?> entries = (java.util.List<?>) section.get("entries");
+        java.util.Map<?, ?> entry = (java.util.Map<?, ?>) entries.get(0);
+        java.util.List<?> methods = (java.util.List<?>) entry.get("methods");
+        java.util.Map<?, ?> method = (java.util.Map<?, ?>) methods.get(0);
+        java.util.Map<?, ?> definition = (java.util.Map<?, ?>) method.get("definition");
+        String service = (String) definition.get("service");
+        String rpc = (String) definition.get("method");
+        String name = ThemeDescriptor.name(service, rpc);
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        ThemeChecks.check(!result.containsKey(name), "duplicate method", name);
+        result.put(name, entry);
+        return result;
+    }
+    static Object opaqueUse() {
+        ThemeOpaqueUse.accept(ThemeDescriptor.name("fixture.theme.Group", "OpaqueHelper"));
+        return null;
+    }
     // Escaped names are unresolved possible constructions, not confidently excluded config calls.
     static String escapedName() {
         String value = ThemeDescriptor.name("fixture.theme.Group", "EscapedName");

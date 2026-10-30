@@ -63,8 +63,16 @@ class GrpcDiscoveryIntegrationTest {
                 assertTrue(calls.any { it.method == wrapper }, "v1 must retain the marshaller factory call")
             } else assertTrue(calls.any { it.method?.owner == raw(version, "ThemeRequestMarshaller") && it.method?.name == "<init>" },
                 "v2 must retain direct marshaller construction")
+            val deepConfig = oracle.getValue(version).method(namespace + "ThemeRpcCases", "deepConfiguration", "(Ljava/util/Map;)Ljava/lang/Object;")
+            val configCalls = dex.classes.getValue(deepConfig.owner).methods.single { it.ref == deepConfig }.instructions.mapNotNull { it.method }
+            assertTrue(configCalls.count { it.owner in setOf("Ljava/util/Map;", "Ljava/util/List;") && it.name == "get" } >= 8,
+                "The configuration regression must retain its deep getter chain in DEX")
+            val guard = oracle.getValue(version).method(namespace + "ThemeChecks", "check", "(ZLjava/lang/String;Ljava/lang/Object;)V")
+            assertNotEquals("check", guard.name)
+            assertTrue(guard in configCalls && factory in configCalls)
             mapOf("version" to version, "factory" to factory, "rpc" to rpc, "requestField" to requestField,
-                "roleAssignmentOrder" to roleAssignments, "apkSha256" to dex.apkSha256)
+                "roleAssignmentOrder" to roleAssignments, "deepConfiguration" to deepConfig, "diagnosticGuard" to guard,
+                "apkSha256" to dex.apkSha256)
         }
         (accepted.keys + ambiguous + unknown + unreviewed + "ThemeDescriptor").forEach {
             assertNotEquals(raw("v1", it), raw("v2", it), "R8 must change the original identity for $it")
@@ -95,10 +103,22 @@ class GrpcDiscoveryIntegrationTest {
             assertEquals("NON_CONSTRUCTION", configuration.status)
             assertTrue(configuration.requestTypes.isEmpty() && configuration.responseTypes.isEmpty(),
                 "A configuration string call is not a message role")
+            val deepConfig = oracle.getValue(version).method(namespace + "ThemeRpcCases", "deepConfiguration", "(Ljava/util/Map;)Ljava/lang/Object;")
+            val dynamicConfiguration = calls.single { it.source.owner.descriptor == deepConfig.owner &&
+                it.source.name == deepConfig.name && it.source.descriptor == deepConfig.descriptor }
+            assertNull(dynamicConfiguration.service)
+            assertNull(dynamicConfiguration.rpc)
+            assertEquals("NON_CONSTRUCTION", dynamicConfiguration.status,
+                "Deep dynamic name inputs and a proven diagnostic guard cannot poison unrelated RPC resolutions")
+            assertTrue(dynamicConfiguration.requestTypes.isEmpty() && dynamicConfiguration.responseTypes.isEmpty())
             val escaped = calls.single { it.rpc == "EscapedName" }
             assertEquals("UNRESOLVED_CONSTRUCTION", escaped.status)
             assertTrue(escaped.requestTypes.isEmpty() && escaped.responseTypes.isEmpty(),
                 "An escaped name must not invent a Proto candidate")
+            val opaque = calls.single { it.rpc == "OpaqueHelper" }
+            assertEquals("UNRESOLVED_CONSTRUCTION", opaque.status,
+                "An ordinary application helper cannot be assumed to be a pure diagnostic guard")
+            assertTrue(opaque.requestTypes.isEmpty() && opaque.responseTypes.isEmpty())
             val duplicate = calls.filter { it.rpc == "Duplicate" }
             assertEquals(2, duplicate.size, "Both real call sites must be retained before entity deduplication")
             assertEquals(setOf(raw(version, "DuplicateRequest")), duplicate.flatMap { it.requestTypes }.map { it.descriptor }.toSet())
@@ -277,7 +297,7 @@ class GrpcDiscoveryIntegrationTest {
 
     private fun checkNonConstruction(base: Path) {
         val rules = cli.write("inputs/non-construction.json", AnalysisRuleFile(items =
-            listOf("configuration-only" to "ConfigurationOnly", "escaped-name" to "EscapedName").map { (key, rpc) ->
+            listOf("configuration-only" to "ConfigurationOnly", "escaped-name" to "EscapedName", "opaque-helper" to "OpaqueHelper").map { (key, rpc) ->
                 AnalysisRuleItem(key, proposedName = "NotAProto", strategy = StrategySpec("grpc-java.rpc-message",
                     parameters("selectors" to listOf(mapOf("service" to "fixture.theme.Group", "rpc" to rpc, "role" to "request"))),
                     requires = mapOf("nameFactory" to "rpc.full-name")))
@@ -287,10 +307,12 @@ class GrpcDiscoveryIntegrationTest {
             "--base-knowledge", knowledge(base), "--run", dir)
         val tasks = cli.read<AnalysisRun>(dir.resolve("run.json")).tasks
         assertEquals(ResolutionStatus.NO_MATCH, tasks.single { it.taskId == "configuration-only" }.resolution!!.status)
-        val escaped = tasks.single { it.taskId == "escaped-name" }.resolution!!
-        assertEquals(ResolutionStatus.UNKNOWN, escaped.status)
-        assertTrue(escaped.candidates.isEmpty(), "UNKNOWN without a recoverable type must not fabricate an owner candidate")
-        assertTrue(escaped.unresolvedPaths.orEmpty().isNotEmpty())
+        for (id in listOf("escaped-name", "opaque-helper")) {
+            val unresolved = tasks.single { it.taskId == id }.resolution!!
+            assertEquals(ResolutionStatus.UNKNOWN, unresolved.status)
+            assertTrue(unresolved.candidates.isEmpty(), "UNKNOWN without a recoverable type must not fabricate an owner candidate")
+            assertTrue(unresolved.unresolvedPaths.orEmpty().isNotEmpty())
+        }
     }
 
     private fun anchorTruth(version: String) = mapOf(

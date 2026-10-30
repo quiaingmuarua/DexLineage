@@ -12,6 +12,25 @@ import kotlin.test.*
 import org.junit.jupiter.api.Test
 
 class RawTraceTest {
+    @Test fun `expression budget keeps a finite result identity without inventing argument constants`() {
+        val string = "Ljava/lang/String;"
+        val getter = MethodId("Lhelper;", "read", listOf(string), string)
+        val factory = MethodId("Ldescriptor;", "name", listOf(string, string), string)
+        val instructions = mutableListOf(insn(Opcode.CONST_STRING, 0, listOf(0), text = "nested"))
+        repeat(7) { index ->
+            instructions += insn(Opcode.INVOKE_STATIC, 2 + index * 4, listOf(0), method = getter)
+            instructions += insn(Opcode.MOVE_RESULT, 5 + index * 4, listOf(0))
+        }
+        instructions += insn(Opcode.CONST_STRING, 32, listOf(1), text = "Read")
+        instructions += insn(Opcode.INVOKE_STATIC, 34, listOf(0, 1), method = factory)
+        instructions += insn(Opcode.MOVE_RESULT, 37, listOf(0))
+        instructions += insn(Opcode.RETURN, 38, listOf(0))
+        val trace = RawTrace.read(method(instructions))
+        assertTrue(trace.complete)
+        assertEquals(Value.CallResult(34, factory), trace.returns.single().value)
+        assertIs<Value.Invocation>(trace.calls.last().args.first(), "The argument is not a fabricated literal")
+    }
+
     @Test fun `different branch values are unknown after merge`() {
         val method = method(listOf(
             insn(Opcode.IF_EQZ, 0, listOf(1), target = 6),

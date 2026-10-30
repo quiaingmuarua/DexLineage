@@ -47,3 +47,15 @@ final class ThemeConfiguration {
     static volatile Object second;
     static String fullName;
 }
+final class ThemeChecks {
+    static void check(boolean condition, String pattern, Object value) {
+        if (condition) return;
+        throw new IllegalArgumentException(format(pattern, new Object[]{value}));
+    }
+    private static String format(String pattern, Object[] values) {
+        return new StringBuilder().append(pattern).append(": ").append(values[0]).toString();
+    }
+}
+final class ThemeOpaqueUse {
+    static void accept(String value) { ThemeConfiguration.fullName = value; }
+}

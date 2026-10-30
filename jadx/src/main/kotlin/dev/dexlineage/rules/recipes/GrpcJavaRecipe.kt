@@ -111,23 +111,31 @@ internal object GrpcJavaRecipe {
     private fun potentialConstruction(s: DexFactSession, trace: RawTrace, call: CallEvent, descriptor: String): Boolean {
         return potentialConstruction(trace, call, descriptor, { it in s.classes }, { type ->
             type in s.classes && s.methods(type).any { it.id.args.isEmpty() && it.id.result == descriptor && it.flags and 8 == 0 }
-        })
+        }, { use -> GrpcDiagnosticGuard.accepts(s, use) && use.args.getOrNull(2)?.let { isNameResult(it, call) } == true })
     }
 
     internal fun potentialConstruction(trace: RawTrace, call: CallEvent, descriptor: String,
-        isApplicationType: (String) -> Boolean, isBuilder: (String) -> Boolean): Boolean {
-        val name = Value.Invocation(call.offset, call.method, call.receiver, call.args)
-        fun uncertainOrName(value: Value) = value == Value.Unknown || value == name
+        isApplicationType: (String) -> Boolean, isBuilder: (String) -> Boolean,
+        isDiagnosticUse: (CallEvent) -> Boolean = { false }): Boolean {
+        fun uncertainOrName(value: Value) = value == Value.Unknown || isNameResult(value, call)
         // A field escape may be consumed by a later method; absence of a local build is not exclusion.
-        if (trace.writes.any { it.offset > call.offset && it.value == name }) return true
+        if (trace.writes.any { it.offset > call.offset && isNameResult(it.value, call) }) return true
         if (trace.writes.any { it.offset > call.offset && it.receiver != null && isBuilder(it.field.owner) && uncertainOrName(it.value) }) return true
         // An unsupported application helper or returned name can hide a construction in a caller/callee.
         // Do not claim that lack of a local supported build proves it is merely a configuration use.
-        if (trace.returns.any { it.value == name }) return true
-        return trace.calls.any { it.offset > call.offset &&
-            (it.method.result == descriptor || it.method.owner == descriptor && it.method.name == "<init>" ||
-                isBuilder(it.method.owner) || isApplicationType(it.method.owner)) &&
-            it.args.any(::uncertainOrName) }
+        if (trace.returns.any { isNameResult(it.value, call) }) return true
+        return trace.calls.any { use ->
+            if (use.offset <= call.offset) false
+            else if (use.method.result == descriptor || use.method.owner == descriptor && use.method.name == "<init>" || isBuilder(use.method.owner))
+                use.args.any(::uncertainOrName)
+            else isApplicationType(use.method.owner) && use.args.any { isNameResult(it, call) } && !isDiagnosticUse(use)
+        }
+    }
+
+    internal fun isNameResult(value: Value, call: CallEvent): Boolean = when (value) {
+        is Value.Invocation -> value.site == call.offset && value.method == call.method
+        is Value.CallResult -> value.site == call.offset && value.method == call.method
+        else -> false
     }
 
     /** Deliberately finite: no assumptions about arbitrary StringBuilder mutators or conditional append order. */

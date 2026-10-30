@@ -71,4 +71,22 @@ class GrpcJavaRecipeTest {
                 "Both static and instance field escapes may feed an unsupported later construction")
         }
     }
+
+    @Test fun `bounded name identity is not confused with an unrelated unknown application argument`() {
+        val factory = MethodId("Ldescriptor;", "name", listOf(string, string), string)
+        val call = CallEvent(2, factory, null, listOf(Value.Unknown, Value.Unknown), emptyMap(), emptyMap(), emptyMap())
+        val token = Value.CallResult(2, factory)
+        assertTrue(GrpcJavaRecipe.isNameResult(token, call))
+        assertFalse(GrpcJavaRecipe.isNameResult(Value.Unknown, call))
+        assertFalse(GrpcJavaRecipe.isNameResult(token.copy(site = 7), call))
+        val helper = MethodId("Lhelper;", "consume", listOf("Ljava/lang/Object;"), "V")
+        fun withArgument(argument: Value) = RawTrace(true, null, listOf(call,
+            CallEvent(6, helper, null, listOf(argument), emptyMap(), emptyMap(), emptyMap())), emptyList(), emptyList(), emptyMap())
+        assertFalse(GrpcJavaRecipe.potentialConstruction(withArgument(Value.Unknown), call, "Ldescriptor;", { true }, { false }))
+        assertTrue(GrpcJavaRecipe.potentialConstruction(withArgument(token), call, "Ldescriptor;", { true }, { false }))
+        assertFalse(GrpcJavaRecipe.potentialConstruction(withArgument(token), call, "Ldescriptor;", { true }, { false }, { true }))
+        val structural = withArgument(Value.Unknown).copy(calls = listOf(call,
+            CallEvent(6, helper.copy(result = "Ldescriptor;"), null, listOf(Value.Unknown), emptyMap(), emptyMap(), emptyMap())))
+        assertTrue(GrpcJavaRecipe.potentialConstruction(structural, call, "Ldescriptor;", { true }, { false }))
+    }
 }
