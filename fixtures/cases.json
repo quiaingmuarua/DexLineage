@@ -10,18 +10,18 @@
       "factoryClass": "dev.dexlineage.fixture.support.LoggerFactory",
       "factoryMethod": "create",
       "wrongSignatureMethod": "createCounted",
-      "apk": "fixtures/android/app/build/outputs/apk/v1/release/app-v1-release-unsigned.apk",
-      "mapping": "fixtures/android/app/build/outputs/mapping/v1Release/mapping.txt",
-      "configuration": "fixtures/android/app/build/outputs/mapping/v1Release/configuration.txt"
+      "apk": "fixtures/android/build/outputs/apk/v1/release/fixture-apk-v1-release-unsigned.apk",
+      "mapping": "fixtures/android/build/outputs/mapping/v1Release/mapping.txt",
+      "configuration": "fixtures/android/build/outputs/mapping/v1Release/configuration.txt"
     },
     "v2": {
       "tag": "FixtureScopeV2",
       "factoryClass": "dev.dexlineage.fixture.support.LoggerFactory",
       "factoryMethod": "build",
       "wrongSignatureMethod": "buildCounted",
-      "apk": "fixtures/android/app/build/outputs/apk/v2/release/app-v2-release-unsigned.apk",
-      "mapping": "fixtures/android/app/build/outputs/mapping/v2Release/mapping.txt",
-      "configuration": "fixtures/android/app/build/outputs/mapping/v2Release/configuration.txt"
+      "apk": "fixtures/android/build/outputs/apk/v2/release/fixture-apk-v2-release-unsigned.apk",
+      "mapping": "fixtures/android/build/outputs/mapping/v2Release/mapping.txt",
+      "configuration": "fixtures/android/build/outputs/mapping/v2Release/configuration.txt"
     }
   },
   "cases": [

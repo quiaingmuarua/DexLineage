@@ -4,19 +4,21 @@ The fixture suite preserves supported rules and invariants through the real Andr
 
 ## Run
 
-Use JDK 21 and the committed root Wrapper. Install Android SDK command-line tools, `platforms;android-35` and `build-tools;35.0.0`, and accept the SDK licenses. Resolve the SDK through `ANDROID_HOME` or ignored `fixtures/android/local.properties` with a `sdk.dir` property. Local SDK paths and generated artifacts are not source inputs to commit.
+Use JDK 21 and the committed root Wrapper. Install Android SDK command-line tools, `platforms;android-35` and `build-tools;35.0.0`, and accept the SDK licenses. Resolve the SDK through `ANDROID_HOME` or ignored root `local.properties` with a `sdk.dir` property. Local SDK paths and generated artifacts are not source inputs to commit.
 
 ```sh
 ./gradlew fixtureIntegrationTest
 ```
 
-Use `.\gradlew.bat fixtureIntegrationTest` on Windows PowerShell. This explicit task builds the independent `fixtures/android/` project, installs the CLI, validates the generated fixture, then runs the `fixture-integration` test group. Ordinary `test`, `check` and `build` exclude that group and need no Android SDK. `realCaseTest` remains an independent task with explicit private case configuration.
+Use `.\gradlew.bat fixtureIntegrationTest` on Windows PowerShell. This explicit task builds the root-owned `:fixture-apk` Android application module, installs the CLI, validates the generated fixture, then runs the `fixture-integration` test group. Ordinary `test`, `check` and `build` exclude that group and need no Android SDK. `realCaseTest` remains an independent task with explicit private case configuration.
 
-To investigate the Android build independently:
+To build only the Android module:
 
 ```sh
-./gradlew -p fixtures/android :app:assembleV1Release :app:assembleV2Release
+./gradlew :fixture-apk:assembleV1Release :fixture-apk:assembleV2Release
 ```
+
+For source editing, open the repository root in Android Studio and sync with the root Wrapper and JDK 21. `:fixture-apk` is a standard Android application module at `fixtures/android`, with `v1` and `v2` product flavors. IDE imports and explicit fixture tasks include the module; plain command-line JVM builds exclude it. Use `-PandroidFixtures=true` to include it explicitly or `-PandroidFixtures=false` for a JVM-only IDE import. Only the root `settings.gradle.kts` owns the module graph.
 
 The fixtures are unsigned release APKs for static analysis; the suite does not install or execute them. AGP 8.10.1 supplies R8 8.10.24. The build uses compile/target SDK 35, build tools 35.0.0, min SDK 26 and Java 17 source/target on build JDK 21. `-dontshrink` and `-dontoptimize` retain the tested code shape, while R8 still renames classes, methods and fields. Separate name dictionaries force different symbols between versions. Original source filenames are replaced with a neutral marker; source code, R8 Mapping and the oracle are not packaged in the APK.
 
@@ -83,7 +85,7 @@ Successful source-to-target cases assert unchanged effective rule revisions, pre
 ## Add a regression case
 
 1. Reduce the observed behavior to a self-authored Java example that is safe to publish. Use meaningful source class/member names. Preserve only the relevant structure; do not copy private APK code, proprietary strings, credentials or decompiled outputs.
-2. Add the case to `fixtures/android/app/src/v1/java/` and `src/v2/java/`, or share unchanged support code in `src/main/java/`. Make version differences explicit. Keep the test within the existing matching capabilities unless a separate implementation task authorizes a new capability.
+2. Add the case to `fixtures/android/src/v1/java/` and `src/v2/java/`, or share unchanged support code in `src/main/java/`. Make version differences explicit. Keep the test within the existing matching capabilities unless a separate implementation task authorizes a new capability.
 3. Declare both versions in `fixtures/cases.json` before reading actual candidate output. Record source owners, expected match outcome, logger fields/signatures and the intended semantic conclusion. Negative cases need explicit expected outcomes too.
 4. Extend the CLI regression assertions for the new behavior, including its immutable dependency rounds when relevant. Use the R8 oracle for candidate identities, not observed candidates to derive an expected answer. Keep production rules free of expected obfuscated owners. Do not inject a synthetic Resolution or bypass the normal queue, submit or publish commands. Generated manual corpus inputs remain outside the matcher context.
 5. Add compiled perturbation checks when the case claims stability under a version change, and published-knowledge/oracle assertions for the resulting entities. Run `fixtureIntegrationTest` and inspect preflight, consumption and command diagnostics. If R8 eliminated or changed the required structure, fix or re-scope the fixture transparently; do not add broad name-preservation rules or weaken matching just to regain a pass.
@@ -102,8 +104,8 @@ Successful source-to-target cases assert unchanged effective rule revisions, pre
 | Offline consumption / oracle | Publication binding, returned DEX facts and expected R8 identities | Invalid published address or a real but incorrect entity |
 | Mapping readback | `knowledge verify` command output and publication Mapping | Exported names failed independent JADX application |
 
-Public command records and run packages are under `cli/build/fixture-integration/<run-id>/`. Each command gets a sequence-numbered directory under `commands/`. JUnit and HTML reports are under `cli/build/test-results/fixtureIntegrationTest/` and `cli/build/reports/tests/fixtureIntegrationTest/`. Generated Android files are under `fixtures/android/app/build/outputs/apk/` and `outputs/mapping/`. Commands have timeouts, failures retain diagnostics, and the suite does not silently retry or skip a failed case.
+Public command records and run packages are under `cli/build/fixture-integration/<run-id>/`. Each command gets a sequence-numbered directory under `commands/`. JUnit and HTML reports are under `cli/build/test-results/fixtureIntegrationTest/` and `cli/build/reports/tests/fixtureIntegrationTest/`. Generated Android files are under `fixtures/android/build/outputs/apk/` and `outputs/mapping/`. Commands have timeouts, failures retain diagnostics, and the suite does not silently retry or skip a failed case.
 
-`cli/build/fixture-integration/apk-build.json` records the Android build command's wall time and exit status, including Gradle startup and any up-to-date work. Suite reports include consumed class/method counts, rule and Resolution identities, oracle outcomes and command-stage timings. Offline DEX consumption and JADX readback are measured separately. Timings are observations for the current machine/cache state, not performance thresholds.
+`cli/build/fixture-integration/apk-build.json` records elapsed time from SDK preflight through completion of both APK assembly tasks, excluding Gradle startup/configuration. It changes from STARTED to PASS only after both assemblies succeed; an interrupted or failed assembly leaves STARTED, with the failure in Gradle's task log. Suite reports include consumed class/method counts, rule and Resolution identities, oracle outcomes and command-stage timings. Offline DEX consumption and JADX readback are measured separately. Timings are observations for the current machine/cache state, not performance thresholds.
 
 CI uses immutable Action commit references, JDK 21 and the committed Wrapper. JVM checks run on Ubuntu 24.04 and Windows; APK integration runs on Ubuntu 24.04. Jobs have a 20-minute timeout. Diagnostic artifacts are retained for 14 days and contain only explicit public build paths. Neither `.local/`, `.runtime/`, private Messages artifacts nor machine SDK configuration is uploaded. A cache miss may cost time, but must not change correctness.

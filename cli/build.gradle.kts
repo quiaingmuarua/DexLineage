@@ -1,4 +1,3 @@
-import java.io.File
 import java.util.Properties
 
 plugins {
@@ -57,47 +56,52 @@ tasks.register<Test>("realCaseTest") {
     }
 }
 
-val buildFixtureApks by tasks.registering(Exec::class) {
+val fixtureProject = rootProject.findProject(":fixture-apk")
+val fixtureBuildTiming = layout.buildDirectory.file("fixture-integration/apk-build.json")
+var fixtureBuildStartedNanos = 0L
+
+val prepareFixtureApkBuild by tasks.registering {
     group = "verification"
-    description = "Build the independently configured Android fixture project with this repository's Wrapper."
-    workingDir(rootProject.projectDir)
-    isIgnoreExitValue = true
-    var startedNanos = 0L
-    val timingReport = layout.buildDirectory.file("fixture-integration/apk-build.json")
-    doFirst {
-        startedNanos = System.nanoTime()
-        timingReport.get().asFile.apply {
+    description = "Check the Android SDK before building the public fixture module."
+    doLast {
+        check(fixtureProject != null) {
+            "Enable the fixture module with -PandroidFixtures=true, then run fixtureIntegrationTest or buildFixtureApks."
+        }
+        fixtureBuildStartedNanos = System.nanoTime()
+        fixtureBuildTiming.get().asFile.apply {
             parentFile.mkdirs()
             writeText("""{"schemaVersion":1,"stage":"apk-build","status":"STARTED"}""")
         }
-        val localSdk = listOf("local.properties", "fixtures/android/local.properties")
-            .map { rootProject.file(it) }.filter { it.isFile }.firstNotNullOfOrNull { file ->
-                Properties().apply { file.inputStream().use(::load) }.getProperty("sdk.dir")?.takeIf { it.isNotBlank() }
-            }
-        val sdkValue = System.getenv("ANDROID_HOME")?.takeIf { it.isNotBlank() }
+        val localProperties = rootProject.file("local.properties")
+        val localSdk = localProperties.takeIf { it.isFile }?.let { file ->
+            Properties().apply { file.inputStream().use(::load) }.getProperty("sdk.dir")?.takeIf { it.isNotBlank() }
+        }
+        val sdkValue = localSdk
+            ?: System.getenv("ANDROID_HOME")?.takeIf { it.isNotBlank() }
             ?: System.getenv("ANDROID_SDK_ROOT")?.takeIf { it.isNotBlank() }
-            ?: localSdk
-            ?: error("fixtureIntegrationTest requires ANDROID_HOME or sdk.dir in local.properties")
+            ?: error("fixtureIntegrationTest requires ANDROID_HOME or sdk.dir in the root local.properties")
         val sdk = rootProject.file(sdkValue)
         check(sdk.resolve("platforms/android-35/android.jar").isFile && sdk.resolve("build-tools/35.0.0").isDirectory) {
             "Install Android SDK platforms;android-35 and build-tools;35.0.0 in $sdk"
         }
-        environment("ANDROID_HOME", sdk.absolutePath)
-        environment("ANDROID_SDK_ROOT", sdk.absolutePath)
-        val javaName = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
-        // Same committed wrapper entrypoint as gradlew, without shell quoting differences.
-        commandLine(File(System.getProperty("java.home"), "bin/$javaName").absolutePath,
-            "-classpath", rootProject.file("gradle/wrapper/gradle-wrapper.jar").absolutePath,
-            "org.gradle.wrapper.GradleWrapperMain", "-p", rootProject.file("fixtures/android").absolutePath,
-            ":app:assembleV1Release", ":app:assembleV2Release", "--no-daemon", "--console=plain")
+    }
+}
+
+// Ordering only: building the module directly does not pull in the CLI test lifecycle.
+fixtureProject?.tasks?.configureEach { mustRunAfter(prepareFixtureApkBuild) }
+
+val buildFixtureApks by tasks.registering {
+    group = "verification"
+    description = "Build both R8 APK flavors of the standard fixture-apk Android module."
+    dependsOn(prepareFixtureApkBuild)
+    if (fixtureProject != null) {
+        dependsOn(":fixture-apk:assembleV1Release", ":fixture-apk:assembleV2Release")
     }
     doLast {
-        val exitCode = executionResult.get().exitValue
-        val elapsedMillis = (System.nanoTime() - startedNanos) / 1_000_000
-        val status = if (exitCode == 0) "PASS" else "FAIL"
-        timingReport.get().asFile.writeText(
-            """{"schemaVersion":1,"stage":"apk-build","status":"$status","exitCode":$exitCode,"elapsedMillis":$elapsedMillis}""")
-        check(exitCode == 0) { "Fixture APK build failed (exit $exitCode); see ${timingReport.get().asFile}" }
+        val elapsedMillis = (System.nanoTime() - fixtureBuildStartedNanos) / 1_000_000
+        // A failed dependency leaves STARTED and Gradle's task failure diagnostics, never PASS.
+        fixtureBuildTiming.get().asFile.writeText(
+            """{"schemaVersion":1,"stage":"apk-build","status":"PASS","elapsedMillis":$elapsedMillis}""")
     }
 }
 
