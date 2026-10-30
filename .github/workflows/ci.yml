@@ -75,6 +75,6 @@ jobs:
             cli/build/reports/tests/fixtureIntegrationTest/**
             cli/build/test-results/fixtureIntegrationTest/**
             cli/build/fixture-integration/**
-            fixtures/android/app/build/outputs/apk/**
-            fixtures/android/app/build/outputs/mapping/**
+            fixtures/android/build/outputs/apk/**
+            fixtures/android/build/outputs/mapping/**
             fixtures/android/build/reports/**

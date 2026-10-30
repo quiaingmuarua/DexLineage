@@ -36,6 +36,12 @@ The launcher retains `build/install/dexlineage` and a 3 GiB maximum heap. Root `
 
 Normal `test` and `build` do not require Android SDK or any APKs. Keep repeatable private profiles, rules, runs, reviews and reports under ignored `.local/`; use ignored `.runtime/` for probes. APKs can stay at their existing paths. No installed JADX GUI, exported Gradle project or model API is required.
 
+### Android Studio
+
+Open the repository root, use the committed Gradle Wrapper and JDK 21, then sync. The same root settings import the five JVM modules and the test-only `:fixture-apk` Android application module (`fixtures/android`). Its standard source sets are `src/main`, `src/v1` and `src/v2`; select `v1Release` or `v2Release` in Build Variants. There is no nested Android Gradle project to import separately.
+
+IDE imports enable the Android module automatically. For other tooling, use `-PandroidFixtures=true`; `-PandroidFixtures=false` explicitly keeps a JVM-only project. Command-line `fixtureIntegrationTest`, `buildFixtureApks` and `:fixture-apk:...` tasks enable it automatically, so existing integration commands stay unchanged. Configure the Android SDK in root `local.properties` (`sdk.dir=...`) or `ANDROID_HOME`.
+
 ## Public APK integration regression
 
 The public fixture suite builds readable, self-authored Java cases into two real APK versions using R8 name obfuscation. It then drives the installed production CLI through Analysis, review submission, publication, Migration, same-APK continuation and independent JADX Mapping readback. Published knowledge also drives a separate raw DEX lookup, whose returned class/member identities are checked against the independent R8 oracle. R8 shrinking and optimization are disabled; compiled version perturbations check that the existing rules survive changes to unrelated members, assignment order and supported construction shapes.
@@ -49,9 +55,9 @@ export ANDROID_HOME=/path/to/android-sdk
 ./gradlew fixtureIntegrationTest
 ```
 
-On PowerShell, set `$env:ANDROID_HOME` to your SDK directory, use `sdkmanager.bat` with the same package names, and run `.\gradlew.bat fixtureIntegrationTest`. Alternatively set `sdk.dir=/path/to/android-sdk` in ignored `fixtures/android/local.properties` (use forward slashes on Windows). Missing SDK components fail the integration task; the suite is never silently skipped.
+On PowerShell, set `$env:ANDROID_HOME` to your SDK directory, use `sdkmanager.bat` with the same package names, and run `.\gradlew.bat fixtureIntegrationTest`. Alternatively set `sdk.dir=/path/to/android-sdk` in ignored root `local.properties` (use forward slashes on Windows). Missing SDK components fail the integration task; the suite is never silently skipped.
 
-The fixture build is independent under `fixtures/android/`: AGP 8.10.1, its embedded R8 8.10.24, compile/target SDK 35, build tools 35.0.0, min SDK 26 and Java source/target 17. It uses the root Gradle Wrapper and JDK 21. No device, emulator, private APK, signing key, model service or repository secret is needed.
+The test-only `:fixture-apk` Android application module lives under `fixtures/android/`: AGP 8.10.1, its embedded R8 8.10.24, compile/target SDK 35, build tools 35.0.0, min SDK 26 and Java source/target 17. It uses the root Gradle Wrapper and JDK 21. No device, emulator, private APK, signing key, model service or repository secret is needed.
 
 R8 Mapping is a test-only oracle for independent expected identities. The matcher receives APKs and rule data; it never receives that Mapping or expected candidate identities. Test Reviews contain predefined fixture semantics and real run/evidence references. They test protocol and publication behavior, **not Agent semantic judgment**.
 
