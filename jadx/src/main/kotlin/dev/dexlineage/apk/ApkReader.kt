@@ -1,6 +1,7 @@
 package dev.dexlineage.apk
 
 import dev.dexlineage.io.ExecutionException
+import dev.dexlineage.io.Digests
 import dev.dexlineage.io.Identities
 import dev.dexlineage.io.requireInput
 import dev.dexlineage.model.DecompiledClass
@@ -21,6 +22,15 @@ import java.util.zip.ZipFile
 
 /** Reads raw DEX facts separately from the Java presentation used for review. */
 object ApkReader {
+    /** Original member identities for explicit annotation import; display aliases are never read. */
+    fun memberInventory(apk: Path): Map<String, Set<String>> {
+        val artifact = Digests.artifact(apk)
+        dev.dexlineage.rules.facts.DexFactSession(artifact, emptySet()).use { session ->
+            return session.classes.keys.associateWith { owner ->
+                (session.fields(owner).map { "${it.name}:${it.type}" } + session.methods(owner).map { it.id.shortId }).toSet()
+            }
+        }
+    }
     private val dexEntryPattern = Regex("classes(?:[0-9]+)?\\.dex")
     private val siteOrder = compareBy<StringUseSite>(
         { it.dexEntry }, { it.classDescriptor }, { it.methodDescriptor },

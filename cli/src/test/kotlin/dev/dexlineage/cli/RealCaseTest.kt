@@ -21,6 +21,10 @@ class RealCaseTest {
     @Test fun `fresh matching unique-only migration and continued analysis preserve knowledge`() {
         val config = Path.of(requireNotNull(System.getProperty("dexlineage.caseProperties")))
         val properties = Properties().apply { Files.newBufferedReader(config).use(::load) }
+        if (properties.getProperty("scenario") == "v04") {
+            V04CaseAcceptance.run(config)
+            return
+        }
         fun path(key: String) = config.toAbsolutePath().parent.resolve(requireNotNull(properties.getProperty(key)) { "Missing $key" }).normalize()
         val analysisDir = path("analysisRun")
         val analysisOutput = path("analysisOutput")
@@ -45,9 +49,9 @@ class RealCaseTest {
         assertEquals(0, MigrationService.tasks(migrationDir, "UNREVIEWED").total)
         assertEquals(0, AnalysisService.tasks(continuationDir, "UNREVIEWED").total)
         assertTrue(analysis.tasks.groupBy { it.rule.revisionId }.values.any { group ->
-            group.size > 1 && group.all { it.resolution.status == ResolutionStatus.AMBIGUOUS }
+            group.size > 1 && group.all { it.resolution!!.status == ResolutionStatus.AMBIGUOUS }
         }, "Real duplicate-component cases must stay invalid")
-        val invalidBindings = analysis.tasks.filter { it.resolution.status != ResolutionStatus.UNIQUE || it.invalidReason != null }
+        val invalidBindings = analysis.tasks.filter { it.resolution!!.status != ResolutionStatus.UNIQUE || it.invalidReason != null }
             .mapNotNull { it.expectedOwner }.toSet()
         assertTrue(initial.entries.none { it.binding in invalidBindings })
         assertEquals(initial, migration.knowledge)
@@ -66,7 +70,7 @@ class RealCaseTest {
         migrated.entries.forEach { old -> assertEquals(old.semanticId, continued.entries.single { it.binding == old.binding }.semanticId) }
         assertEquals(migrated.unresolved, continued.unresolved)
         assertEquals(continued, failed.baseKnowledge)
-        assertTrue(failed.tasks.isNotEmpty() && failed.tasks.all { it.resolution.status != ResolutionStatus.UNIQUE || it.invalidReason != null })
+        assertTrue(failed.tasks.isNotEmpty() && failed.tasks.all { it.resolution!!.status != ResolutionStatus.UNIQUE || it.invalidReason != null })
         assertEquals(continued.entries, preserved.entries)
         assertEquals(continued.unresolved, preserved.unresolved)
         assertEquals(Files.readString(continuationOutput.resolve("mapping.tiny")), Files.readString(failedOutput.resolve("mapping.tiny")))
@@ -87,9 +91,9 @@ class RealCaseTest {
         assertEquals(discovery.leads, newDiscovery.leads, "Fresh discovery cannot consume saved candidates")
         assertEquals(discovery.matchCounts, newDiscovery.matchCounts)
         val freshSource = ResolutionEngine.execute(analysis.apk, analysis.tasks.map { it.rule }, output.resolve("fresh-source-matches"))
-        assertEquals(analysis.tasks.map { it.resolution }.associateBy { it.rule.revisionId }, freshSource.resolutions)
-        val freshTarget = ResolutionEngine.execute(migration.targetApk, migration.tasks.map { it.resolution.rule }, output.resolve("fresh-target-matches"))
-        assertEquals(migration.tasks.map { it.resolution }.associateBy { it.rule.revisionId }, freshTarget.resolutions)
+        assertEquals(analysis.tasks.map { it.resolution!! }.associateBy { it.rule.revisionId }, freshSource.resolutions)
+        val freshTarget = ResolutionEngine.execute(migration.targetApk, migration.tasks.map { it.resolution!!.rule }, output.resolve("fresh-target-matches"))
+        assertEquals(migration.tasks.map { it.resolution!! }.associateBy { it.rule.revisionId }, freshTarget.resolutions)
         AnalysisService.publish(analysisDir, output.resolve("analysis-replay"), analysisOutput.resolve("report.json"))
         MigrationService.publish(migrationDir, output.resolve("migration-replay"), migrationOutput.resolve("report.json"))
         AnalysisService.publish(continuationDir, output.resolve("continuation-replay"), continuationOutput.resolve("report.json"))
@@ -104,7 +108,7 @@ class RealCaseTest {
         listOf(analysis.apk, migration.targetApk, migration.knowledgeFile, continuation.baseFile!!, failed.baseFile!!).forEach(Digests::verify)
         JsonFiles.writeNew(output.resolve("acceptance.json"), mapOf("schemaVersion" to SCHEMA_VERSION,
             "analysisRunId" to analysis.runId, "migrationRunId" to migration.runId,
-            "analysisResolutions" to analysis.tasks.groupingBy { it.resolution.status }.eachCount(),
+            "analysisResolutions" to analysis.tasks.groupingBy { it.resolution!!.status }.eachCount(),
             "analysisConfirmed" to initial.entries.size, "migrationConfirmed" to migrated.entries.size,
             "migrationUnresolved" to migrated.unresolved.size, "continuedConfirmed" to continued.entries.size,
             "continuedUpdatesOrAdditions" to updated.map { it.name }, "failedUpdatePreservedBaseline" to true,

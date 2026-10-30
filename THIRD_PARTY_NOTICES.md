@@ -1,6 +1,6 @@
 # Third-party notices
 
-DexLineage's own source and public fixture source are licensed under [Apache-2.0](LICENSE). The installed CLI also contains the following unmodified libraries. This inventory covers the resolved runtime distribution for version 0.3.0; it does not change their licenses.
+DexLineage's own source and public fixture source are licensed under [Apache-2.0](LICENSE). The installed CLI also contains the following unmodified libraries. This inventory covers the resolved runtime distribution for version 0.4.0; it does not change their licenses. Dependency versions remain unchanged from 0.3.0.
 
 | Artifact | Version | License and accompanying text |
 |---|---|---|

@@ -40,9 +40,9 @@ internal object MigrationFixtures {
     fun evidence(run: MigrationRun): Map<String, EvidenceRecord> = run.tasks.flatMap { task -> listOf(task.entry.binding) + task.candidates.map { it.ref } }
         .map { evidence(run, it) }.associateBy { it.evidenceId }
     fun review(run: MigrationRun, task: MigrationTask = run.tasks.first()): MigrationReview =
-        MigrationReview(task.taskId, task.resolution.resolutionId, task.resolution.rule.revisionId, ReviewAction.ACCEPT, Confidence.HIGH, true,
+        MigrationReview(task.taskId, task.resolution!!.resolutionId, task.resolution!!.rule.revisionId, ReviewAction.ACCEPT, Confidence.HIGH, true,
             "Source and target retain the provider cache responsibility", listOf("Constructor dependencies changed"), emptyList(),
-            (listOf(task.entry.binding) + listOfNotNull(task.resolution.uniqueRef)).map { Identities.evidenceId(run.runId, it) })
+            (listOf(task.entry.binding) + listOfNotNull(task.resolution!!.uniqueRef)).map { Identities.evidenceId(run.runId, it) })
     fun decide(run: MigrationRun, reviews: List<MigrationReview> = run.tasks.map { review(run, it) }, evidence: Map<String, EvidenceRecord> = evidence(run)) =
         DecisionPolicy.decide(run, reviews.associate { it.taskId to ("revision:${it.taskId}" to it) }, evidence)
 }
@@ -70,7 +70,7 @@ class DecisionPolicyTest {
         val original = MigrationFixtures.task()
         val unknown = MigrationFixtures.proof(original.candidates.single().ref, original.entry.locators, MatchStatus.UNKNOWN)
         for (facts in listOf(unknown.matches, original.matches + MigrationFixtures.proof(ClassRef(MigrationFixtures.newSha, "Ly;", "classes2.dex"), original.entry.locators, MatchStatus.UNKNOWN).matches)) {
-            val task = original.copy(resolution = RuleProofs.create(MigrationFixtures.newSha, original.resolution.rule, "fixture-engine", facts))
+            val task = original.copy(resolution = RuleProofs.create(MigrationFixtures.newSha, original.resolution!!.rule, "fixture-engine", facts))
             val run = MigrationFixtures.run(listOf(task))
             assertEquals(TaskState.INVALID, MigrationFixtures.decide(run, emptyList()).single().state)
             assertFailsWith<ValidationException> { MigrationFixtures.decide(run) }
@@ -149,9 +149,9 @@ class DecisionPolicyTest {
     @Test fun `target-only rule cannot accept a review bound to the source rule`() {
         val task = MigrationFixtures.task()
         val changedRule = RuleProofs.revision(listOf(Locator("string-use", "new-target-feature")))
-        val changedProof = MigrationFixtures.proof(task.resolution.uniqueRef!!, changedRule.locators)
+        val changedProof = MigrationFixtures.proof(task.resolution!!.uniqueRef!!, changedRule.locators)
         val run = MigrationFixtures.run(listOf(task.copy(resolution = changedProof)))
-        val review = MigrationFixtures.review(run).copy(ruleRevisionId = task.resolution.rule.revisionId)
+        val review = MigrationFixtures.review(run).copy(ruleRevisionId = task.resolution!!.rule.revisionId)
         assertFailsWith<ValidationException> { MigrationFixtures.decide(run, listOf(review)) }
     }
 }
