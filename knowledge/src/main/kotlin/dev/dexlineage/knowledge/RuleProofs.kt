@@ -30,7 +30,7 @@ object RuleProofs {
     }
 
     fun create(apkSha256: String, rule: RuleRevision, engineBuildId: String, matches: List<MatchFact>,
-               dependencies: Map<String, SupportAnchor> = emptyMap()): Resolution {
+               dependencies: Map<String, SupportAnchor> = emptyMap(), unresolvedPaths: List<UnresolvedPath>? = null): Resolution {
         validate(rule)
         requireInput(engineBuildId.isNotBlank(), "Missing matching engine build identity")
         requireInput(dependencies.keys == rule.requires.keys, "Resolution dependencies differ from declared roles")
@@ -44,6 +44,15 @@ object RuleProofs {
             requireInput(EntityRef(match.owner, match.method).kind == rule.resultKind, "Fact entity kind differs from rule")
             validateEntity(EntityRef(match.owner, match.method))
         }
+        val unresolved = unresolvedPaths.orEmpty().distinct().sortedWith(compareBy(
+            { EntityRef(it.source.owner, it.source).identity }, { it.codeUnitOffset ?: -1 }, { JsonFiles.encode(it) }))
+        unresolved.forEach { path ->
+            validateEntity(EntityRef(path.source.owner, path.source))
+            requireInput(path.source.owner.apkSha256 == apkSha256, "Unresolved path belongs to another APK")
+            requireInput(path.codeUnitOffset == null || path.codeUnitOffset >= 0, "Invalid unresolved path offset")
+            requireInput(path.reason.isNotBlank(), "Unresolved path needs a reason")
+            requireInput(path.role == null || path.role in setOf("request", "response"), "Invalid unresolved RPC role")
+        }
         val sorted = matches.sortedWith(compareBy({ it.locatorIndex }, { EntityRef(it.owner, it.method).identity },
             { it.field?.fieldName.orEmpty() }, { it.field?.fieldType.orEmpty() }, { JsonFiles.encode(it) }))
         val candidates = sorted.filter { it.status != MatchStatus.FAIL }.groupBy { EntityRef(it.owner, it.method).identity }.toSortedMap().map { (_, facts) ->
@@ -53,12 +62,14 @@ object RuleProofs {
         val passCount = candidates.count { it.status == MatchStatus.PASS }
         val status = when {
             passCount >= 2 -> ResolutionStatus.AMBIGUOUS
+            unresolved.isNotEmpty() -> ResolutionStatus.UNKNOWN
             candidates.isEmpty() -> ResolutionStatus.NO_MATCH
             candidates.size == 1 && passCount == 1 -> ResolutionStatus.UNIQUE
             else -> ResolutionStatus.UNKNOWN
         }
         val draft = Resolution(resolutionId = "", apkSha256 = apkSha256, rule = rule, engineBuildId = engineBuildId,
-            status = status, candidates = candidates, matches = sorted, dependencies = dependencies.toSortedMap())
+            status = status, candidates = candidates, matches = sorted, dependencies = dependencies.toSortedMap(),
+            unresolvedPaths = unresolved.takeIf { it.isNotEmpty() })
         return draft.copy(resolutionId = id(draft))
     }
 
@@ -72,7 +83,7 @@ object RuleProofs {
 
     fun validate(value: Resolution) = checkedInput("resolution") {
         requireInput(value.schemaVersion == SCHEMA_VERSION && value.engineVersion == TOOL_VERSION && value.searchScope == "apk-all-dex", "Unsupported resolution contract")
-        val rebuilt = create(value.apkSha256, value.rule, value.engineBuildId, value.matches, value.dependencies)
+        val rebuilt = create(value.apkSha256, value.rule, value.engineBuildId, value.matches, value.dependencies, value.unresolvedPaths)
         requireInput(rebuilt == value, "Resolution identity or candidate result mismatch")
         value.matches.forEach { match ->
             Identities.requireDescriptor(match.owner.descriptor)

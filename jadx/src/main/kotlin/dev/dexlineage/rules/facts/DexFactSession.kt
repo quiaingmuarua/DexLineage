@@ -31,6 +31,11 @@ internal class DexFactSession(val artifact: Artifact, anchors: Set<String>, want
     private val traces = mutableMapOf<String, RawTrace>()
     private val implementations = mutableMapOf<String, List<Class>>()
     val callOwners = mutableMapOf<String, MutableSet<String>>()
+    data class DirectCall(val source: MethodId, val target: MethodId, val offset: Int)
+    val wantedCallSites = mutableListOf<DirectCall>()
+    private val recipeCache = mutableMapOf<String, Any>()
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Any> cachedRecipe(key: String, create: () -> T): T = recipeCache.getOrPut(key, create) as T
     val scan: ScanResult
 
     init {
@@ -64,6 +69,8 @@ internal class DexFactSession(val artifact: Artifact, anchors: Set<String>, want
                             val shortId = "${ref.name}(${ref.argTypes.joinToString("")})${ref.returnType}"
                             method.codeReader?.visitInstructions { insn ->
                                 instructionCount++
+                                if (insn.opcode == Opcode.UNKNOWN) throw ExecutionException(
+                                    "Unknown raw instruction in $owner->$shortId at ${insn.offset}")
                                 if (insn.opcode == Opcode.CONST_STRING) {
                                     insn.decode(); stringCount++
                                     uses[insn.indexAsString]?.add(StringUseSite(entry.name, owner, shortId, insn.offset, insn.fileOffset, insn.indexAsString))
@@ -72,7 +79,11 @@ internal class DexFactSession(val artifact: Artifact, anchors: Set<String>, want
                                     if (insn.indexType == InsnIndexType.METHOD_REF) {
                                         val target = insn.indexAsMethod.also { it.load() }
                                         val key = "${target.parentClassType}->${target.name}(${target.argTypes.joinToString("")})${target.returnType}"
-                                        if (key in callKeys) callOwners.getOrPut(key) { linkedSetOf() } += owner
+                                        if (key in callKeys) {
+                                            callOwners.getOrPut(key) { linkedSetOf() } += owner
+                                            wantedCallSites += DirectCall(MethodId(owner, ref.name, ref.argTypes.toList(), ref.returnType),
+                                                MethodId(target.parentClassType, target.name, target.argTypes.toList(), target.returnType), insn.offset)
+                                        }
                                     }
                                 }
                             }

@@ -39,13 +39,13 @@ Alternative locators are OR alternatives for one semantic target: all execute, t
 
 | Candidate result | Resolution | Publication eligibility |
 |---|---|---|
-| One entity has PASS and no other possible entity exists | `UNIQUE` | Class target may enter semantic review; support anchor may be published |
+| One entity has PASS, no other possible entity exists and no relevant unresolved path remains | `UNIQUE` | Class target may enter semantic review; support anchor may be published |
 | Two or more entities have PASS | `AMBIGUOUS` | Invalid |
-| One PASS entity plus a different UNKNOWN entity, or only unknown entities | `UNKNOWN` | Invalid |
-| No non-failing entity | `NO_MATCH` | Invalid |
+| Fewer than two PASS entities, with a different UNKNOWN entity or a relevant unresolved path | `UNKNOWN` | Invalid |
+| No non-failing entity and no relevant unresolved path | `NO_MATCH` | Invalid |
 | Scan/execution incomplete | Execution error | No successful matching result |
 
-Several fields/locators supporting one class still identify one entity. A PASS and UNKNOWN relation for the same entity can remain UNIQUE; its unknown diagnostics are retained. Renaming one task, rejecting another, reviewing only part of the queue or changing submission order cannot change these results.
+Several fields/locators supporting one class still identify one entity. A PASS and UNKNOWN relation for the same entity can remain UNIQUE when no relevant unresolved path remains; its unknown diagnostics are retained. Renaming one task, rejecting another, reviewing only part of the queue or changing submission order cannot change these results.
 
 METHOD results use the full owner plus original method name and descriptor. Two methods in the same class remain two entities. `Resolution.uniqueRef` only returns CLASS results; `uniqueEntity` covers both supported result kinds. An anchor has no Rename alias and cannot become a Mapping row merely because it is unique.
 
@@ -62,6 +62,9 @@ The registry dispatches ordinary Kotlin code. Strategy implementations read fact
 | `messages.rpc-descriptor` | METHOD | None | `service`, `rpc`, optional descriptor field-label configuration |
 | `messages.rpc-message` | CLASS | `descriptor`: METHOD | Same RPC identity and `role`: request or response |
 | `messages.rpc-related-type` | CLASS | `descriptor`: METHOD produced by `messages.rpc-descriptor` | `role`: descriptor, builder or marshaller; RPC identity and effective labels inherited from producer |
+| `grpc-java.full-method-name` | METHOD | `descriptor`: CLASS | Observed static two-String signature and slash-concatenation body |
+| `grpc-java.rpc-discovery` | CLASS facts plus call catalogue | `nameFactory`: METHOD | Optional Descriptor role labels; all direct calls are inventoried |
+| `grpc-java.rpc-message` | CLASS | `nameFactory`: METHOD | Nonempty exact `selectors` array of service/RPC/request-or-response roles; optional role labels |
 
 `requires` maps a local role to an anchor key, for example `{"factory":"logger-factory"}`. A key is a lookup into the frozen current-APK knowledge, not a displayed name or an old obfuscated descriptor. A resolved dependency can legitimately constrain a search to all implementations of its interface or all uses of its factory; it cannot constrain the search to a desired answer list.
 
@@ -72,6 +75,18 @@ Multi-round execution is explicit: prepare → publish → new prepare with a ba
 Messages-specific strategies identify the logging-name role rather than assuming every no-argument String method has that role. RPC strategies bind service, RPC, builder and request/response roles in one construction, supporting the observed static marshaller factory and constructor forms. Unsupported flow remains UNKNOWN. Source/target symbol names, input corpora and test oracle identities do not choose candidates.
 
 RPC related types retain typed construction facts: descriptor allocation, builder method owner, both role-field declaration types and actual marshaller implementation types. The `marshaller` role requires one common declaration interface with compatible implementations. An outer RPC method returning `Object` does not identify its descriptor type. Multiple constructions are considered together: different complete role types remain ambiguous, and any unresolved construction downgrades all known related-role candidates to UNKNOWN before normal class deduplication can prefer PASS. A dependency whose complete construction cannot be reproduced fails execution rather than manufacturing NO_MATCH. Related-type rules inherit service/RPC/label configuration from the verified producer, and cannot override it independently.
+
+## gRPC library facts and RPC catalogue
+
+The gRPC strategies reuse the Descriptor construction reader used by existing Messages RPC rules. Their starting point is a current-APK full-method-name anchor. A session indexes references to that exact owner/name/signature and caches the corresponding call/construction catalogue. Several methods constructing one RPC do not have to become a unique METHOD: class queries union all matching role types and then apply normal entity uniqueness.
+
+The catalogue retains direct call positions, captured service/RPC strings, construction states, role types and diagnostics. A configuration call whose result does not feed a Descriptor construction remains an observation, without becoming a Proto candidate. Potential constructions with unresolved arguments or types remain explicit. An optional `unresolvedPaths` field in a matching proof records those paths with their source method, instruction location, known selector parts and reason. Relevant uncertainty blocks UNIQUE even when no defensible candidate class can be emitted; it must not be represented by inventing a caller-as-Proto candidate. Two definite types remain AMBIGUOUS. Absent optional fields stay omitted so existing schema-4 digests remain stable.
+
+When an argument expression reaches the local depth budget, a finite call-result token retains its producer site and method without pretending to know its value. This prevents unrelated unknown values from being treated as the same RPC name. The reader can also prove a limited boolean-check/exception-formatting shape used by configuration validation: normal execution returns immediately, and failure only formats and throws an argument exception. This proof examines the called code; it does not exempt an application address or a method name. Opaque helpers, field escapes and returned names remain unresolved.
+
+Analysis owns RPC draft grouping and naming. An optional `rpcDrafts` profile section selects review services and request/response suggestion suffixes. It never narrows APK discovery or class matching. All relations supporting one Proto class produce one task and one finite selectors-set rule. Capture values stay separate from suggested names; conflicting suggestions remain unnamed. RPC caller identities are evidence, while discovery owner checks refer to the actual Proto class.
+
+Explicit same-APK `--reference-knowledge` inputs are frozen in the Analysis run. Current confirmed bindings can supply semantic IDs and canonical names after unique matching, without importing their Review, anchors or old proof into the new decision. Reference-only entries require fresh matching and semantic review before publication; unrelated reference entries are not copied. The report records identity provenance, and the publication retains its own evidence closure. Base-knowledge failure protection continues to apply only to the base snapshot.
 
 ## Manual annotation corpus
 

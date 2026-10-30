@@ -61,7 +61,11 @@ internal object AnalysisPolicy {
         requireInput(action != null && level != null && !review.rationale.isNullOrBlank(), "Analysis review requires action, confidence and rationale")
         requireInput(ids != null && ids.none { it == null } && ids.distinct().size == ids.size, "Invalid evidence references")
         requireInput(unverified != null && unverified.none { it == null }, "Invalid unverified list")
-        if (action == ReviewAction.ACCEPT) requireInput(task.invalidReason == null && proof.status == ResolutionStatus.UNIQUE, "Cannot accept an invalid matching result")
+        if (action == ReviewAction.ACCEPT) {
+            requireInput(task.invalidReason == null && proof.status == ResolutionStatus.UNIQUE, "Cannot accept an invalid matching result")
+            if (task.identitySourceKnowledgeId != null) requireInput(review.name == task.existingEntry?.name,
+                "Referenced canonical name must be retained; defer a disputed identity instead of renaming it in the theme package")
+        }
         review.name?.let { Identities.renamedFullName(proof.uniqueRef?.descriptor ?: "Lvalidation;", it) }
         val allowed = allowedRefs(run, task)
         review.evidenceIds.forEach { id ->
@@ -74,6 +78,7 @@ internal object AnalysisPolicy {
     fun allowedRefs(run: AnalysisRun, task: AnalysisTask): Set<ClassRef> = buildSet {
         addAll(task.resolution?.candidates.orEmpty().map { it.ref })
         task.resolution?.let { addAll(proofRefs(it)) }
+        task.resolution?.unresolvedPaths.orEmpty().forEach { add(it.source.owner) }
         task.expectedOwner?.let(::add)
         task.existingEntry?.let { entry ->
             add(entry.binding)

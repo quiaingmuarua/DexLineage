@@ -34,7 +34,7 @@ object ResolutionEngine {
         }
         val builtin = ready.filter { it.strategyId == "builtin.locators" }
         val custom = ready.filter { it.strategyId != "builtin.locators" }
-        val facts = linkedMapOf<String, List<MatchFact>>()
+        val results = linkedMapOf<String, StrategyResult>()
         lateinit var builtinQuery: QueryResult
         DexFactSession(artifact, ready.flatMap { StrategyRegistry.literals(it) }.toSet(), dependencies.values.flatMap { it.values }.mapNotNull { it.binding.method }.toSet()).use { session ->
             dependencies.values.flatMap { it.values }.distinctBy { it.key }.forEach { anchor ->
@@ -42,17 +42,24 @@ object ResolutionEngine {
                 anchor.binding.method?.let { requireInput(session.method(it) != null, "Anchor method absent from APK") }
             }
             builtinQuery = RuleEngine.queryWithScan(artifact, builtin.flatMap { it.locators }, workDir, session.scan)
-            custom.forEach { rule -> facts[rule.revisionId] = StrategyRegistry.execute(session, rule, dependencies.getValue(rule.revisionId)) }
+            custom.forEach { rule -> results[rule.revisionId] = StrategyRegistry.execute(session, rule, dependencies.getValue(rule.revisionId)) }
         }
         val resolutions = resolveQuery(artifact, builtin, engineBuildId, builtinQuery).toMutableMap()
-        custom.forEach { rule -> resolutions[rule.revisionId] = RuleProofs.create(artifact.sha256, rule, engineBuildId, facts.getValue(rule.revisionId), dependencies.getValue(rule.revisionId)).also(RuleProofs::validate) }
+        custom.forEach { rule ->
+            val result = results.getValue(rule.revisionId)
+            resolutions[rule.revisionId] = RuleProofs.create(artifact.sha256, rule, engineBuildId, result.matches,
+                dependencies.getValue(rule.revisionId), result.unresolvedPaths).also(RuleProofs::validate)
+        }
         val already = builtinQuery.analysis?.code.orEmpty()
-        val evidenceOwners = facts.values.flatten().filter { it.status != MatchStatus.FAIL }.flatMap { listOf(it.owner) + it.relatedRefs + it.trace.map { trace -> trace.owner } }.map { it.descriptor }.toSet()
+        val evidenceOwners = custom.filterNot(StrategyRegistry::deferredEvidence).flatMap { results.getValue(it.revisionId).matches }
+            .filter { it.status != MatchStatus.FAIL }.flatMap { listOf(it.owner) + it.relatedRefs + it.trace.map { trace -> trace.owner } }.map { it.descriptor }.toSet()
         val extra = ApkReader.decompile(Path.of(artifact.path), evidenceOwners - already.map { it.descriptor }.toSet(), workDir.resolve("strategy-evidence"))
         val analysis = FieldAnalysis(builtinQuery.analysis?.bindings.orEmpty(), (already + extra).distinctBy { it.descriptor },
             builtinQuery.analysis?.diagnostics.orEmpty(), (builtinQuery.analysis?.elapsedMillis ?: 0) + extra.sumOf { it.elapsedMillis }, builtinQuery.analysis?.unavailableOwners.orEmpty())
         Digests.verify(artifact)
-        return ResolutionBatch(resolutions.toSortedMap(), builtinQuery.scan, analysis, waiting)
+        val rpcCalls = results.values.flatMap { it.rpcCalls.orEmpty() }.distinct().sortedWith(compareBy(
+            { EntityRef(it.source.owner, it.source).identity }, { it.codeUnitOffset }))
+        return ResolutionBatch(resolutions.toSortedMap(), builtinQuery.scan, analysis, waiting, rpcCalls.takeIf { it.isNotEmpty() })
     }
 
     internal fun normalizedRules(rules: List<RuleRevision>): List<RuleRevision> {

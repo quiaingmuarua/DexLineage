@@ -86,6 +86,24 @@ Discovery is optional. An Agent can write an [Analysis rules file](examples/anal
 
 Use `tasks --state INVALID` and `inspect` to investigate invalid results. Their candidates and diagnostics remain available; they do not require an artificial Review. Even a unique result needs actual semantic review before acceptance. Field-initializer naming requires owner and internal factory code; plain string-use rules require owner code and their actual matching evidence.
 
+## Discover gRPC request and response classes
+
+The gRPC flow starts with a verified framework class and method, then follows raw DEX call references across the APK. [The anchor example](examples/grpc-anchor-rules.json) uses one observed service/RPC to establish a descriptor METHOD, its actual Descriptor CLASS, and the unique static full-name function. Prepare/publish three immutable rounds, passing each publication as the next base. The full-name rule checks the observed `argument0 + "/" + argument1` StringBuilder implementation; an old obfuscated method name is never an input.
+
+After the `grpc.full-name` anchor is ready, use [the discovery profile](examples/grpc-discovery-profile.json):
+
+```powershell
+& $cli analysis discover --apk 'D:\apks\current.apk' --profile .local\grpc-profile.json --base-knowledge .local\anchors-r3\knowledge.json --out .local\grpc-discovery
+& $cli analysis prepare --apk 'D:\apks\current.apk' --rules .local\grpc-discovery\rules.json --base-knowledge .local\anchors-r3\knowledge.json --reference-knowledge .local\existing\knowledge.json --run .local\grpc-analysis
+& $cli analysis tasks --run .local\grpc-analysis --service example.Service --state ALL --limit 100
+```
+
+Discovery writes `discovery.json`, `rpc-catalog.json` and class rule drafts. It records all direct calls to the framework anchor, including dynamic/configuration uses and unsupported constructions. The reader binds the name, builder and both marshaller roles to one Descriptor construction. Request/response types come from their respective default instances, with no assumption about field order, constructor parameter order, outer method return type or unary-only RPCs.
+
+`rpcDrafts.reviewServices` selects review scope, not the matching domain. Every discovered service remains in the catalogue and mechanical matching. Shared Proto classes become one task with all exact service/RPC/role selectors; names suggested from RPC roles are not recovered source names. Inspect the selected tasks in batches, read their owner and dependency evidence, then use the usual `submit / publish / knowledge verify` commands. New bulk RPC rules defer Java/Smali presentation until inspect.
+
+`--reference-knowledge` may be repeated with explicit same-APK packages. Only after unique matching does Analysis reuse a matching confirmed binding's semantic ID and canonical name. References supply identity, not accepted Reviews, matching proofs or dependency anchors: each adopted class needs this run's evidence and Review. Publication contains base entries and newly approved entries, not the entire reference package. Conflicting identities, changed reference inputs and wrong APKs are rejected. Existing names that cannot be justified should be deferred rather than silently changed.
+
 ## Import manual work and execute dependency rounds
 
 Import a JADX `projectVersion=1` annotation project into a new corpus directory:

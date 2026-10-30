@@ -14,6 +14,8 @@ internal sealed interface Value {
     data class Array(val site: Int) : Value
     data class FieldRead(val field: Field, val receiver: Value? = null) : Value
     data class Invocation(val site: Int, val method: MethodId, val receiver: Value?, val args: List<Value>) : Value
+    /** A finite identity for a call whose argument tree exceeded the local expression budget. */
+    data class CallResult(val site: Int, val method: MethodId) : Value
 }
 internal data class CallEvent(val offset: Int, val method: MethodId, val receiver: Value?, val args: List<Value>,
     val fields: Map<Field, Value>, val arrays: Map<Value.Array, Map<Int, Value>>, val constructions: Map<Value, CallEvent>)
@@ -114,7 +116,7 @@ internal data class RawTrace(val complete: Boolean, val reason: String?, val cal
                             (args + listOfNotNull(receiver)).forEach(::invalidateArray)
                             // Constructor metadata is deliberately shallow, keeping the abstract domain finite.
                             if (i.method.name == "<init>" && receiver != Value.Unknown && receiver != null) constructors[receiver] = call
-                            result = if (args.any { depth(it) > 6 } || (receiver?.let(::depth) ?: 0) > 6) Value.Unknown
+                            result = if (args.any { depth(it) > 6 } || (receiver?.let(::depth) ?: 0) > 6) Value.CallResult(i.offset, i.method)
                                 else Value.Invocation(i.offset, i.method, receiver, args)
                         } else if (!i.op.name.startsWith("IF") && i.regs.isNotEmpty()) regs[i.regs[0]] = Value.Unknown
                     }

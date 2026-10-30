@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 4,
+  "kind": "analysis-rules",
+  "items": [],
+  "anchors": [
+    {
+      "key": "sample.read",
+      "strategy": {
+        "strategyId": "messages.rpc-descriptor",
+        "parameters": {"service": "example.Service", "rpc": "Read"},
+        "resultKind": "METHOD",
+        "requires": {}
+      }
+    },
+    {
+      "key": "grpc.descriptor",
+      "strategy": {
+        "strategyId": "messages.rpc-related-type",
+        "parameters": {"role": "descriptor"},
+        "resultKind": "CLASS",
+        "requires": {"descriptor": "sample.read"}
+      }
+    },
+    {
+      "key": "grpc.full-name",
+      "strategy": {
+        "strategyId": "grpc-java.full-method-name",
+        "parameters": {},
+        "resultKind": "METHOD",
+        "requires": {"descriptor": "grpc.descriptor"}
+      }
+    }
+  ]
+}
