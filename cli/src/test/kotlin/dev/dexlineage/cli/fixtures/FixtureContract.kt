@@ -52,6 +52,29 @@ class R8Oracle(path: Path) {
         ?: error("Source class absent from independent R8 oracle: $sourceName")
     fun descriptor(sourceName: String): String = "L${mappedClass(sourceName)};"
     fun originalName(descriptor: String): String? = tree.classes.singleOrNull { "L${it.getDstName(0)};" == descriptor }?.srcName?.replace('/', '.')
+    fun method(sourceOwner: String, sourceName: String, sourceDescriptor: String): RawDexMethodRef {
+        val cls = tree.getClass(sourceOwner.replace('.', '/')) ?: error("Missing source class $sourceOwner")
+        val method = cls.getMethod(sourceName, sourceDescriptor)
+            ?: error("Missing source method $sourceOwner.$sourceName$sourceDescriptor")
+        val name = method.getDstName(0) ?: error("Unmapped source method $sourceOwner.$sourceName$sourceDescriptor")
+        val mapped = tree.mapDesc(sourceDescriptor, 0)
+        val close = mapped.indexOf(')')
+        require(mapped.startsWith('(') && close > 0) { "Invalid source method descriptor: $sourceDescriptor" }
+        val arguments = mapped.substring(1, close)
+        val type = Regex("\\[*(?:[ZBCSIJFD]|L[^;]+;)")
+        val args = type.findAll(arguments).map { it.value }.toList()
+        val result = mapped.substring(close + 1)
+        require(args.joinToString("") == arguments && (result == "V" || type.matches(result))) {
+            "Invalid source method descriptor: $sourceDescriptor"
+        }
+        return RawDexMethodRef(descriptor(sourceOwner), name, args, result)
+    }
+    fun field(sourceOwner: String, name: String, sourceType: String): RawDexFieldRef {
+        val cls = tree.getClass(sourceOwner.replace('.', '/')) ?: error("Missing source class $sourceOwner")
+        val field = cls.getField(name, sourceType) ?: error("Missing source field $sourceOwner.$name:$sourceType")
+        val mappedName = field.getDstName(0) ?: error("Unmapped source field $sourceOwner.$name:$sourceType")
+        return RawDexFieldRef(descriptor(sourceOwner), mappedName, tree.mapDesc(sourceType, 0))
+    }
     fun mappedField(sourceClass: String, sourceName: String): String {
         val cls = tree.getClass(sourceClass.replace('.', '/')) ?: error("Missing source class $sourceClass")
         return cls.fields.singleOrNull { it.srcName == sourceName }?.getDstName(0)

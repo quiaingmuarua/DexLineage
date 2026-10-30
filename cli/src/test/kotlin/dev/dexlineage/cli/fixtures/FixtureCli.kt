@@ -13,6 +13,7 @@ import kotlin.test.assertTrue
 /** Each invocation is a fresh JVM using exactly the installed application's runtime libraries. */
 internal class FixtureCli(private val distribution: Path, val output: Path, private val repository: Path) {
     private var sequence = 0
+    private val timings = mutableListOf<Map<String, Any?>>()
     val gson = GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
 
     init {
@@ -37,7 +38,17 @@ internal class FixtureCli(private val distribution: Path, val output: Path, priv
         Files.createDirectories(directory)
         val stdout = directory.resolve("stdout.json")
         val stderr = directory.resolve("stderr.log")
+        val category = when (args.getOrNull(1)) {
+            "prepare", "discover" -> "matching"
+            "publish" -> "publication"
+            "inspect" -> "inspection"
+            "verify" -> "mapping-readback"
+            "submit" -> "review-submission"
+            "tasks", "targets" -> "queue"
+            else -> "other"
+        }
         val record = linkedMapOf<String, Any?>("schemaVersion" to 1, "startedAt" to Instant.now().toString(),
+            "category" to category,
             "arguments" to args, "command" to command, "workingDirectory" to repository.toString(),
             "stdout" to stdout.toString(), "stderr" to stderr.toString(), "timeoutSeconds" to 90,
             "artifactPaths" to args.windowed(2).filter { it[0] in setOf("--run", "--out", "--work", "--review", "--rules", "--knowledge", "--profile") }
@@ -56,6 +67,9 @@ internal class FixtureCli(private val distribution: Path, val output: Path, priv
         record["timedOut"] = !completed
         record["exitCode"] = if (completed) process.exitValue() else null
         Files.writeString(directory.resolve("command.json"), gson.toJson(record))
+        timings += mapOf("label" to label, "category" to category, "elapsedMillis" to record["elapsedMillis"],
+            "exitCode" to record["exitCode"], "timedOut" to record["timedOut"], "record" to directory.resolve("command.json").toString())
+        write("command-timings.json", timingSummary)
         assertTrue(completed, "CLI timeout: $directory")
         assertEquals(expectedExit, process.exitValue(), "CLI $label failed; diagnostics $directory\n${Files.readString(stderr)}")
         return if (expectedExit == 0) JsonParser.parseString(Files.readString(stdout)).asJsonObject.get("result")
@@ -69,4 +83,7 @@ internal class FixtureCli(private val distribution: Path, val output: Path, priv
 
     inline fun <reified T> result(label: String, vararg args: Any): T = gson.fromJson(execute(label, *args), T::class.java)
     val commandCount: Int get() = sequence
+    val timingSummary: Map<String, Any> get() = mapOf("schemaVersion" to 1,
+        "totalsMillis" to timings.groupBy { it.getValue("category") }.mapValues { (_, values) ->
+            values.sumOf { (it.getValue("elapsedMillis") as Number).toLong() } }, "commands" to timings.toList())
 }

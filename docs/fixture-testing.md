@@ -51,13 +51,40 @@ CLASS and METHOD use separate entity identities. Assertions for methods compare 
 
 Do not assert complete decompiled Java text, instruction offsets or APK hashes across builds. Assert identity, structure, captures, Resolution, review decisions and name application. APK digests still bind each actual run to its actual input.
 
+## Consume published knowledge through raw DEX
+
+The final static verification chain is:
+
+```text
+R8 APK -> production CLI matching -> published knowledge.json
+       -> offline DEX lookup from knowledge bindings -> independent R8 oracle assertions
+```
+
+`PublishedKnowledgeDexCheck.verify(apk, knowledgeFile)` reads the on-disk publication and accepts no oracle, candidate list or expected owner. The test-side DEX index is shared with specimen preflight and cached by APK content hash. It retains DEX entry names and original class, field and full method identities. The consumer verifies the APK digest and resolves each confirmed class or support anchor at its exact published address. It returns actual fields and methods; the surrounding test separately checks them against independently mapped source identities. Reusing the input parser does not mean reusing matcher conclusions or trusting the saved `Resolution.matches` as newly observed facts.
+
+Historical `unresolved` entries are recorded but never looked up as current bindings. Wrong APKs, wrong DEX entries, missing classes and nonexistent full method signatures fail consumption. A real but incorrect class can be read successfully; the outer oracle must reject that identity. Negative tests mutate only explicit test copies, never the original publication. The suite checks intermediate anchor-only publications, final Analysis/Migration publications, same-APK continuation, retained knowledge after failed updates and saved publication replay. JADX Mapping readback remains a separate check.
+
+The consumer stays on the test classpath. It is not an APK runtime, a DEX interpreter, a new matcher or a field/method rename feature. Static member access and exact identity checks make no claim that application methods were executed or that two versions are behaviorally equivalent.
+
+## Compiled version perturbations
+
+The v2 fixture changes are deliberate, finite cases rather than a random mutation system. `FixturePerturbations` verifies their surviving DEX shape before matching:
+
+- Unrelated fields, methods and differently typed overloads are added to logger and Handler owners.
+- A business description method changes implementation while its locating logger relation stays intact.
+- RPC construction changes field/constructor assignment order, request/response role order in descriptive text, marshaller factory wrapping to direct construction, and construction ownership from a descriptor helper to a stub.
+
+Each assertion checks the relevant compiled members or call/assignment relationships. Changing Java declaration order alone is insufficient evidence; offsets and entire instruction sequences are not golden snapshots. Existing missing-string, duplicate-owner, unsupported-shape and cross-builder cases continue to check refusal behavior.
+
+Successful source-to-target cases assert unchanged effective rule revisions, preserved semantic IDs and fresh target-APK Resolutions. Rule-replacement recovery remains a separate category. An internal change that removes a rule's declared feature is not required to keep matching, and an unsupported expression must not be accepted just to preserve a fixture success count.
+
 ## Add a regression case
 
 1. Reduce the observed behavior to a self-authored Java example that is safe to publish. Use meaningful source class/member names. Preserve only the relevant structure; do not copy private APK code, proprietary strings, credentials or decompiled outputs.
 2. Add the case to `fixtures/android/app/src/v1/java/` and `src/v2/java/`, or share unchanged support code in `src/main/java/`. Make version differences explicit. Keep the test within the existing matching capabilities unless a separate implementation task authorizes a new capability.
 3. Declare both versions in `fixtures/cases.json` before reading actual candidate output. Record source owners, expected match outcome, logger fields/signatures and the intended semantic conclusion. Negative cases need explicit expected outcomes too.
 4. Extend the CLI regression assertions for the new behavior, including its immutable dependency rounds when relevant. Use the R8 oracle for candidate identities, not observed candidates to derive an expected answer. Keep production rules free of expected obfuscated owners. Do not inject a synthetic Resolution or bypass the normal queue, submit or publish commands. Generated manual corpus inputs remain outside the matcher context.
-5. Run `fixtureIntegrationTest` and inspect preflight and command diagnostics. If R8 eliminated or changed the required structure, fix or re-scope the fixture transparently; do not add broad name-preservation rules or weaken matching just to regain a pass.
+5. Add compiled perturbation checks when the case claims stability under a version change, and published-knowledge/oracle assertions for the resulting entities. Run `fixtureIntegrationTest` and inspect preflight, consumption and command diagnostics. If R8 eliminated or changed the required structure, fix or re-scope the fixture transparently; do not add broad name-preservation rules or weaken matching just to regain a pass.
 6. Commit only source, rules/oracle, tests and relevant docs. APKs, R8 output and CLI runs stay in build directories. New private experiments belong in `.runtime/`; repeatable private acceptance belongs in `.local/`.
 
 ## Diagnose a failure
@@ -66,11 +93,15 @@ Do not assert complete decompiled Java text, instruction offsets or APK hashes a
 |---|---|---|
 | SDK or Android build | Gradle error and installed SDK components | Environment or fixture compilation; no matching conclusion yet |
 | Fixture preflight | R8 version, `mapping.txt`, `configuration.txt`, expected fields/calls | Test input no longer demonstrates the declared scenario |
+| Compiled perturbation | `perturbations.json` and raw DEX members/calls | The claimed version change was absent or no longer has the intended shape |
 | CLI command | `command.json`, `stdout.json`, `stderr.log` in the command's directory | Includes argument, exit-code and output evidence for the actual subprocess |
 | Match assertion | Run snapshot and frozen Resolution, compared with `fixtures/cases.json` and R8 Mapping | Candidate/factor behavior changed |
 | Review or publication | Submission payload, saved journal and publication report | A policy, evidence or conflict invariant changed |
+| Offline consumption / oracle | Publication binding, returned DEX facts and expected R8 identities | Invalid published address or a real but incorrect entity |
 | Mapping readback | `knowledge verify` command output and publication Mapping | Exported names failed independent JADX application |
 
 Public command records and run packages are under `cli/build/fixture-integration/<run-id>/`. Each command gets a sequence-numbered directory under `commands/`. JUnit and HTML reports are under `cli/build/test-results/fixtureIntegrationTest/` and `cli/build/reports/tests/fixtureIntegrationTest/`. Generated Android files are under `fixtures/android/app/build/outputs/apk/` and `outputs/mapping/`. Commands have timeouts, failures retain diagnostics, and the suite does not silently retry or skip a failed case.
+
+`cli/build/fixture-integration/apk-build.json` records the Android build command's wall time and exit status, including Gradle startup and any up-to-date work. Suite reports include consumed class/method counts, rule and Resolution identities, oracle outcomes and command-stage timings. Offline DEX consumption and JADX readback are measured separately. Timings are observations for the current machine/cache state, not performance thresholds.
 
 CI uses immutable Action commit references, JDK 21 and the committed Wrapper. JVM checks run on Ubuntu 24.04 and Windows; APK integration runs on Ubuntu 24.04. Jobs have a 20-minute timeout. Diagnostic artifacts are retained for 14 days and contain only explicit public build paths. Neither `.local/`, `.runtime/`, private Messages artifacts nor machine SDK configuration is uploaded. A cache miss may cost time, but must not change correctness.

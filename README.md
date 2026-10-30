@@ -38,7 +38,7 @@ Normal `test` and `build` do not require Android SDK or any APKs. Keep repeatabl
 
 ## Public APK integration regression
 
-The public fixture suite builds readable, self-authored Java cases into two real APK versions using R8 name obfuscation. It then drives the installed production CLI through Analysis, review submission, publication, Migration, same-APK continuation and independent JADX Mapping readback. R8 shrinking and optimization are disabled; this suite checks the existing rules and publication constraints under real symbol changes.
+The public fixture suite builds readable, self-authored Java cases into two real APK versions using R8 name obfuscation. It then drives the installed production CLI through Analysis, review submission, publication, Migration, same-APK continuation and independent JADX Mapping readback. Published knowledge also drives a separate raw DEX lookup, whose returned class/member identities are checked against the independent R8 oracle. R8 shrinking and optimization are disabled; compiled version perturbations check that the existing rules survive changes to unrelated members, assignment order and supported construction shapes.
 
 Install Android SDK command-line tools, configure `ANDROID_HOME`, then install the pinned components and accept their licenses:
 
@@ -54,6 +54,8 @@ On PowerShell, set `$env:ANDROID_HOME` to your SDK directory, use `sdkmanager.ba
 The fixture build is independent under `fixtures/android/`: AGP 8.10.1, its embedded R8 8.10.24, compile/target SDK 35, build tools 35.0.0, min SDK 26 and Java source/target 17. It uses the root Gradle Wrapper and JDK 21. No device, emulator, private APK, signing key, model service or repository secret is needed.
 
 R8 Mapping is a test-only oracle for independent expected identities. The matcher receives APKs and rule data; it never receives that Mapping or expected candidate identities. Test Reviews contain predefined fixture semantics and real run/evidence references. They test protocol and publication behavior, **not Agent semantic judgment**.
+
+The verification chain is **R8 APK → coding matching → published knowledge JSON → offline DEX verification → R8 oracle assertions**. The offline consumer takes only the APK and saved knowledge, resolves exact class/method addresses, and returns raw member facts. It does not execute DEX, infer missing bindings from historical entries, or use the oracle to find an entity. These checks establish static identity and rule-reuse regressions, not behavioral equivalence.
 
 CI runs JVM checks on Ubuntu 24.04 and Windows, and the APK suite on Ubuntu 24.04. Public reports, command logs and generated fixture APK/Mapping/configuration are retained as CI artifacts for 14 days. See [fixture maintenance and failure diagnosis](docs/fixture-testing.md). Passing these cases does not establish coverage of all APKs or all obfuscators.
 

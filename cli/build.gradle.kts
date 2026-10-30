@@ -61,7 +61,15 @@ val buildFixtureApks by tasks.registering(Exec::class) {
     group = "verification"
     description = "Build the independently configured Android fixture project with this repository's Wrapper."
     workingDir(rootProject.projectDir)
+    isIgnoreExitValue = true
+    var startedNanos = 0L
+    val timingReport = layout.buildDirectory.file("fixture-integration/apk-build.json")
     doFirst {
+        startedNanos = System.nanoTime()
+        timingReport.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText("""{"schemaVersion":1,"stage":"apk-build","status":"STARTED"}""")
+        }
         val localSdk = listOf("local.properties", "fixtures/android/local.properties")
             .map { rootProject.file(it) }.filter { it.isFile }.firstNotNullOfOrNull { file ->
                 Properties().apply { file.inputStream().use(::load) }.getProperty("sdk.dir")?.takeIf { it.isNotBlank() }
@@ -82,6 +90,14 @@ val buildFixtureApks by tasks.registering(Exec::class) {
             "-classpath", rootProject.file("gradle/wrapper/gradle-wrapper.jar").absolutePath,
             "org.gradle.wrapper.GradleWrapperMain", "-p", rootProject.file("fixtures/android").absolutePath,
             ":app:assembleV1Release", ":app:assembleV2Release", "--no-daemon", "--console=plain")
+    }
+    doLast {
+        val exitCode = executionResult.get().exitValue
+        val elapsedMillis = (System.nanoTime() - startedNanos) / 1_000_000
+        val status = if (exitCode == 0) "PASS" else "FAIL"
+        timingReport.get().asFile.writeText(
+            """{"schemaVersion":1,"stage":"apk-build","status":"$status","exitCode":$exitCode,"elapsedMillis":$elapsedMillis}""")
+        check(exitCode == 0) { "Fixture APK build failed (exit $exitCode); see ${timingReport.get().asFile}" }
     }
 }
 
