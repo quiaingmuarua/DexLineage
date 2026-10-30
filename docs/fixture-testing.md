@@ -30,6 +30,10 @@ The installed production CLI runs in child processes. Test code does not call An
 
 Before accepting a task, the harness compares actual matching results with the independent oracle. It uses case-authored semantic conclusions for the Review and fills in only the real run, rule, Resolution and evidence references. These are deterministic test inputs, not simulated Agent reasoning. An actual analysis session still needs someone to read and judge the evidence.
 
+`AnalysisWorkspaceIntegrationTest` exercises the compiled `messages.grpc` method in both APK versions and the generic `profile` method with a private logger. Real CLI processes create the stage workspace and Review packet, stop before review, reject the blank template and incorrect proof, accept predefined fixture semantics, then resume publication. The suite checks out-of-scope matching, uncertain competitors, shared-type deduplication, repeated resume, saved publication replay, offline DEX/Oracle assertions and independent JADX readback. Workspace unit tests exercise interruption boundaries and partial output recovery; private real acceptance also interrupts and resumes a live process.
+
+For a focused development run, use `./gradlew :cli:fixtureIntegrationTest --tests '*AnalysisWorkspaceIntegrationTest'`. The root aggregate task does not accept `--tests`. Full CI continues to run the entire public suite and uploads only build-directory diagnostics.
+
 Assertions cover:
 
 - public and private static final loggers, captures distinct from confirmed aliases, and real factory/owner evidence;

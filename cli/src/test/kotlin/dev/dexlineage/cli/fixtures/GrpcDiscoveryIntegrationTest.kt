@@ -4,6 +4,7 @@ import dev.dexlineage.analysis.*
 import dev.dexlineage.knowledge.KnowledgeFiles
 import dev.dexlineage.migration.*
 import dev.dexlineage.model.*
+import dev.dexlineage.messages.MessagesRpcArtifacts
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
@@ -97,7 +98,7 @@ class GrpcDiscoveryIntegrationTest {
                 "--base-knowledge", knowledge(base), "--out", discoveryDir)
             assertTrue(Files.isRegularFile(discoveryDir.resolve("rpc-catalog.json")))
             val discovery = cli.read<AnalysisDiscovery>(discoveryDir.resolve("discovery.json"))
-            val calls = assertNotNull(discovery.rpcCalls)
+            val calls = assertNotNull(MessagesRpcArtifacts.read(discovery.methodArtifacts.orEmpty())).calls
             assertEquals((services + "fixture.theme.Outside").toSet(), calls.mapNotNull { it.service }.toSet())
             val configuration = calls.single { it.rpc == "ConfigurationOnly" }
             assertEquals("NON_CONSTRUCTION", configuration.status)

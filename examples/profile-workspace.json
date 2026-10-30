@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 4,
+  "apk": "sample.apk",
+  "profile": "logger-profile.json",
+  "referenceKnowledge": []
+}

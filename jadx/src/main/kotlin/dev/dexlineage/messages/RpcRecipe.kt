@@ -1,4 +1,4 @@
-package dev.dexlineage.rules.recipes
+package dev.dexlineage.messages
 
 import dev.dexlineage.model.*
 import dev.dexlineage.io.ExecutionException
@@ -237,12 +237,6 @@ internal object RpcRecipe {
         return s.fields(read.field.owner).singleOrNull { it.key == read.field.key && it.flags and 8 != 0 }?.type
     }
 
-    private fun staticDefaultTypes(s: DexFactSession, method: Method): Set<String> {
-        val result = linkedSetOf<String>()
-        method.code?.visitInstructions { i -> if (i.opcode == jadx.api.plugins.input.insns.Opcode.SGET) {
-            i.decode(); val f = i.indexAsField
-            if (f.parentClassType == f.type && f.type in s.classes) result += f.type
-        } }
-        return result
-    }
+    private fun staticDefaultTypes(s: DexFactSession, method: Method): Set<String> = MethodCodeFacts.staticReads(method)
+        .filter { it.owner == it.type && it.type in s.classes }.map { it.type }.toCollection(linkedSetOf())
 }

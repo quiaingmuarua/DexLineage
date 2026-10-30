@@ -1,9 +1,10 @@
-package dev.dexlineage.rules.recipes
+package dev.dexlineage.messages
 
 import dev.dexlineage.io.ExecutionException
 import dev.dexlineage.io.JsonFiles
 import dev.dexlineage.model.*
 import dev.dexlineage.rules.StrategyResult
+import dev.dexlineage.rules.TypedArtifact
 import dev.dexlineage.rules.facts.*
 import dev.dexlineage.rules.facts.DexFactSession.*
 
@@ -11,7 +12,7 @@ import dev.dexlineage.rules.facts.DexFactSession.*
 internal object GrpcJavaRecipe {
     data class Selector(val service: String, val rpc: String, val role: String)
     private data class Site(val observation: RpcCallObservation, val bindings: List<RpcRecipe.Binding>,
-                            val unresolved: UnresolvedPath?)
+                            val unresolved: RpcUnresolvedPath?)
     private data class Catalogue(val sites: List<Site>)
     private const val STRING = "Ljava/lang/String;"
     private const val BUILDER = "Ljava/lang/StringBuilder;"
@@ -23,10 +24,7 @@ internal object GrpcJavaRecipe {
                 it.flags and 8 != 0 && it.id.args == listOf(STRING, STRING) && it.id.result == STRING
             }.map { method ->
                 val trace = s.trace(method)
-                var straightLine = method.code?.tries?.isEmpty() == true
-                method.code?.visitInstructions { i ->
-                    if (i.opcode.name.startsWith("IF") || i.opcode.name in setOf("GOTO", "PACKED_SWITCH", "SPARSE_SWITCH")) straightLine = false
-                }
+                val straightLine = MethodCodeFacts.controlShape(method).straightLine
                 val status = fullMethodNameStatus(trace, straightLine)
                 MessagesRecipes.fact(s, owner.descriptor, status, "full-method-name-body",
                     when (status) {
@@ -43,7 +41,7 @@ internal object GrpcJavaRecipe {
         val catalogue = s.cachedRecipe(cacheKey) { catalogue(s, rule, factory) }
         val selectors = if (rule.strategyId == "grpc-java.rpc-message") selectors(rule) else null
         val facts = mutableListOf<MatchFact>()
-        val unresolved = mutableListOf<UnresolvedPath>()
+        val unresolved = mutableListOf<RpcUnresolvedPath>()
         for (site in catalogue.sites) {
             val observation = site.observation
             val service = observation.service; val rpc = observation.rpc
@@ -62,7 +60,9 @@ internal object GrpcJavaRecipe {
                 }
             }
         }
-        return StrategyResult(facts, catalogue.sites.map { it.observation }, unresolved.distinct())
+        val artifact = MessagesRpcCatalogue(apkSha256 = s.artifact.sha256, nameFactory = factory,
+            calls = catalogue.sites.map { it.observation }, unresolvedPaths = catalogue.sites.mapNotNull { it.unresolved }.distinct())
+        return StrategyResult(facts, unresolved.distinct().map { it.uncertainty() }, listOf(TypedArtifact(MessagesRpcArtifacts.KIND, artifact)))
     }
 
     fun selectors(rule: RuleRevision): List<Selector> = rule.parameters.getAsJsonArray("selectors").map {
@@ -70,7 +70,7 @@ internal object GrpcJavaRecipe {
         Selector(value.get("service").asString, value.get("rpc").asString, value.get("role").asString)
     }
 
-    internal fun mayMatch(path: UnresolvedPath, selector: Selector): Boolean =
+    internal fun mayMatch(path: RpcUnresolvedPath, selector: Selector): Boolean =
         (path.service == null || path.service == selector.service) &&
             (path.rpc == null || path.rpc == selector.rpc) && (path.role == null || path.role == selector.role)
 
@@ -87,7 +87,7 @@ internal object GrpcJavaRecipe {
                 if (!trace.complete) {
                     val reason = trace.reason ?: "Unreadable name-factory caller"
                     Site(RpcCallObservation(source, site.offset, service, rpc, "UNRESOLVED_CONSTRUCTION", diagnostics = listOf(reason)),
-                        emptyList(), UnresolvedPath(source, site.offset, reason, service, rpc))
+                        emptyList(), RpcUnresolvedPath(source, site.offset, reason, service, rpc))
                 } else if (call == null || !potentialConstruction(s, trace, call, factory.owner.descriptor)) {
                     val reason = if (call == null) "Raw invocation is unreachable in the supported control-flow trace"
                         else "Name-factory result does not feed a possible descriptor construction in this method"
@@ -101,7 +101,7 @@ internal object GrpcJavaRecipe {
                         inspected.bindings.map { s.ref(it.request) }.distinct().sortedBy { it.descriptor },
                         inspected.bindings.map { s.ref(it.response) }.distinct().sortedBy { it.descriptor },
                         if (incomplete) listOf(reason) else emptyList()), inspected.bindings,
-                        if (incomplete) UnresolvedPath(source, site.offset, reason, service, rpc) else null)
+                        if (incomplete) RpcUnresolvedPath(source, site.offset, reason, service, rpc) else null)
                 }
             }
         return Catalogue(sites)

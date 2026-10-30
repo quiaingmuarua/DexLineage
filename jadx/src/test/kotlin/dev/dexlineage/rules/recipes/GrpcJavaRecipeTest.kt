@@ -1,5 +1,8 @@
 package dev.dexlineage.rules.recipes
 
+import dev.dexlineage.messages.GrpcJavaRecipe
+import dev.dexlineage.messages.RpcUnresolvedPath
+
 import dev.dexlineage.model.*
 import dev.dexlineage.rules.facts.*
 import dev.dexlineage.rules.facts.DexFactSession.*
@@ -45,11 +48,11 @@ class GrpcJavaRecipeTest {
     @Test fun `unknown construction is scoped only by selector parts actually known`() {
         val ref = MethodRef(ClassRef("a".repeat(64), "Lcaller;", "classes.dex"), "run", "()V")
         val target = GrpcJavaRecipe.Selector("fixture.Service", "Read", "request")
-        assertTrue(GrpcJavaRecipe.mayMatch(UnresolvedPath(ref, 2, "unknown"), target))
-        assertTrue(GrpcJavaRecipe.mayMatch(UnresolvedPath(ref, 2, "unknown", "fixture.Service"), target))
-        assertFalse(GrpcJavaRecipe.mayMatch(UnresolvedPath(ref, 2, "unknown", "other.Service"), target))
-        assertFalse(GrpcJavaRecipe.mayMatch(UnresolvedPath(ref, 2, "unknown", rpc = "Write"), target))
-        assertFalse(GrpcJavaRecipe.mayMatch(UnresolvedPath(ref, 2, "unknown", role = "response"), target))
+        assertTrue(GrpcJavaRecipe.mayMatch(RpcUnresolvedPath(ref, 2, "unknown"), target))
+        assertTrue(GrpcJavaRecipe.mayMatch(RpcUnresolvedPath(ref, 2, "unknown", "fixture.Service"), target))
+        assertFalse(GrpcJavaRecipe.mayMatch(RpcUnresolvedPath(ref, 2, "unknown", "other.Service"), target))
+        assertFalse(GrpcJavaRecipe.mayMatch(RpcUnresolvedPath(ref, 2, "unknown", rpc = "Write"), target))
+        assertFalse(GrpcJavaRecipe.mayMatch(RpcUnresolvedPath(ref, 2, "unknown", role = "response"), target))
     }
 
     @Test fun `name escaping into an opaque descriptor helper remains a possible construction`() {

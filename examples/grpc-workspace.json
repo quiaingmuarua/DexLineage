@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 4,
+  "apk": "sample.apk",
+  "profile": "grpc-discovery-profile.json",
+  "seedRules": "grpc-anchor-rules.json",
+  "referenceKnowledge": []
+}

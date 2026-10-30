@@ -65,6 +65,32 @@ The verification chain is **R8 APK → coding matching → published knowledge J
 
 CI runs JVM checks on Ubuntu 24.04 and Windows, and the APK suite on Ubuntu 24.04. Public reports, command logs and generated fixture APK/Mapping/configuration are retained as CI artifacts for 14 days. See [fixture maintenance and failure diagnosis](docs/fixture-testing.md). Passing these cases does not establish coverage of all APKs or all obfuscators.
 
+## Run and resume an analysis method
+
+An analysis method combines existing matching operations into a finite, recoverable flow. `messages.grpc` owns the observed Messages RPC shapes and topic policy; `profile` runs the existing generic discovery/template flow. JADX is the current fact-reading implementation. Neither method can bypass matching, Review or publication checks.
+
+Copy [the gRPC workspace configuration](examples/grpc-workspace.json), [seed rules](examples/grpc-anchor-rules.json) and [discovery profile](examples/grpc-discovery-profile.json) under `.local/`, then set the APK path and observed service/RPC inputs. Alternatively use [the profile workspace configuration](examples/profile-workspace.json) with a logger profile. Relative configuration paths are resolved from the configuration file. Optional `baseKnowledge` and `referenceKnowledge` paths are explicit inputs; expected obfuscated targets are never matching inputs.
+
+```powershell
+& $cli analysis run --method messages.grpc --config .local\grpc-workspace.json --work .local\topic-work-001
+& $cli analysis status --work .local\topic-work-001
+# After interruption, resume the same frozen inputs and implementation.
+& $cli analysis resume --work .local\topic-work-001
+```
+
+The Messages method declares three seed rounds; `profile` has none. The shared flow then discovers, prepares rules and writes a review packet. It stops at `WAITING_REVIEW` and returns `runPath` and `packetPath`. Read `summary.md` and `review-packet.json`, copy `review-template.json` to a separate review file, and fill the semantic judgment, rationale and limitations after reading the linked evidence. The template pre-fills proof/evidence identities but contains no automatic HIGH/ACCEPT decision.
+
+```powershell
+& $cli analysis submit --run '<runPath>' --review .local\review.json
+& $cli analysis resume --work .local\topic-work-001
+```
+
+Once the selected review scope has decisions, explicit `resume` freezes the Review revisions and publishes to a new directory. Invalid, rejected and deferred tasks remain visible; unreviewed targets outside the selected scope do not block the reviewed topic. `COMPLETE` resume returns the same publication. Later Review revisions can still be published with the existing explicit `analysis publish` command.
+
+Workspace records coordinate progress; existing runs, Review journals and knowledge packages remain authoritative. A completed stage is reused only after its full output set and digests validate. Incomplete attempts are preserved and retried in a fresh attempt directory on explicit resume. Changing the inputs or implementation requires a new workspace. There is one writer per workspace, no background scheduler or automatic rule repair.
+
+The individual commands below remain available. To generate the same work package for a manually prepared run, add `--out` to `analysis inspect`; without `--out`, its previous evidence-list output is unchanged.
+
 ## Analyze an APK
 
 Copy [the logger profile](examples/logger-profile.json) into `.local/` and set its business tag. It discovers field-initializer clues and can generate per-target rule drafts. No owner list or expected target belongs in the profile.
@@ -86,7 +112,7 @@ Discovery is optional. An Agent can write an [Analysis rules file](examples/anal
 
 Use `tasks --state INVALID` and `inspect` to investigate invalid results. Their candidates and diagnostics remain available; they do not require an artificial Review. Even a unique result needs actual semantic review before acceptance. Field-initializer naming requires owner and internal factory code; plain string-use rules require owner code and their actual matching evidence.
 
-## Discover gRPC request and response classes
+## Discover Messages gRPC request and response classes
 
 The gRPC flow starts with a verified framework class and method, then follows raw DEX call references across the APK. [The anchor example](examples/grpc-anchor-rules.json) uses one observed service/RPC to establish a descriptor METHOD, its actual Descriptor CLASS, and the unique static full-name function. Prepare/publish three immutable rounds, passing each publication as the next base. The full-name rule checks the observed `argument0 + "/" + argument1` StringBuilder implementation; an old obfuscated method name is never an input.
 
@@ -100,7 +126,7 @@ After the `grpc.full-name` anchor is ready, use [the discovery profile](examples
 
 Discovery writes `discovery.json`, `rpc-catalog.json` and class rule drafts. It records all direct calls to the framework anchor, including dynamic/configuration uses and unsupported constructions. The reader binds the name, builder and both marshaller roles to one Descriptor construction. Request/response types come from their respective default instances, with no assumption about field order, constructor parameter order, outer method return type or unary-only RPCs.
 
-`rpcDrafts.reviewServices` selects review scope, not the matching domain. Every discovered service remains in the catalogue and mechanical matching. Shared Proto classes become one task with all exact service/RPC/role selectors; names suggested from RPC roles are not recovered source names. Inspect the selected tasks in batches, read their owner and dependency evidence, then use the usual `submit / publish / knowledge verify` commands. New bulk RPC rules defer Java/Smali presentation until inspect.
+`method.parameters.reviewServices` selects review scope, not the matching domain. Every discovered service remains in the catalogue and mechanical matching. Shared Proto classes become one task with all exact service/RPC/role selectors; names suggested from RPC roles are not recovered source names. Inspect the selected tasks in batches, read their owner and dependency evidence, then use the usual `submit / publish / knowledge verify` commands. Bulk RPC rules defer Java/Smali presentation until inspect. Older schema-4 `rpcDrafts` profiles remain readable through the compatibility codec.
 
 `--reference-knowledge` may be repeated with explicit same-APK packages. Only after unique matching does Analysis reuse a matching confirmed binding's semantic ID and canonical name. References supply identity, not accepted Reviews, matching proofs or dependency anchors: each adopted class needs this run's evidence and Review. Publication contains base entries and newly approved entries, not the entire reference package. Conflicting identities, changed reference inputs and wrong APKs are rejected. Existing names that cannot be justified should be deferred rather than silently changed.
 

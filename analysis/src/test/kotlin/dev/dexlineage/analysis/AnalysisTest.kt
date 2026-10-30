@@ -271,4 +271,37 @@ class AnalysisTest {
         assertEquals(TaskState.DEFERRED, AnalysisPolicy.decide(run, mapOf(r.taskId to r), mapOf(record.evidenceId to record)).single().state)
         assertEquals(TaskState.ACCEPTED, AnalysisPolicy.decide(run, mapOf(r.taskId to r.copy(unverified = listOf("Unrelated method is incomplete"))), mapOf(record.evidenceId to record)).single().state)
     }
+
+    @Test fun `review packet binds current proof and evidence without supplying a semantic decision`() {
+        val apk = apk()
+        val (dir, run) = run(listOf(task(apk)), apk)
+        val out = temp.resolve("packet")
+        val result = ReviewPackets.write(dir, setOf("target"), out)
+        assertEquals(result, ReviewPackets.validate(out, dir, setOf("target")))
+        val packet = JsonFiles.read(Path.of(result.packetPath), ReviewPacket::class.java)
+        assertEquals(run.tasks.single(), packet.tasks.single().task)
+        assertEquals(listOf(Identities.evidenceId(run.runId, ref(apk, "La;"))), packet.tasks.single().requiredEvidenceIds)
+        assertEquals(1, packet.sharedEvidence.size)
+        val template = com.google.gson.JsonParser.parseString(Files.readString(Path.of(result.templatePath))).asJsonObject
+        val item = template.getAsJsonArray("items").single().asJsonObject
+        assertTrue(item.get("action") == null || item.get("action").isJsonNull)
+        assertTrue(item.get("level") == null || item.get("level").isJsonNull)
+        assertEquals("", item.get("rationale").asString)
+        assertFailsWith<ValidationException> { AnalysisService.submit(dir, Path.of(result.templatePath)) }
+        assertTrue(ReviewStore.latest(dir, run.runId).isEmpty())
+        Files.writeString(Path.of(packet.sharedEvidence.single().javaFile.path), "changed")
+        assertFailsWith<ValidationException> { ReviewPackets.validate(out, dir, setOf("target")) }
+    }
+
+    @Test fun `empty review scope is a complete packet and invalid tasks need no fabricated review`() {
+        val apk = apk()
+        val (dir, _) = run(listOf(task(apk, owners = listOf("La;", "Lb;"))), apk)
+        val empty = ReviewPackets.write(dir, emptySet(), temp.resolve("empty-packet"))
+        ReviewPackets.validate(temp.resolve("empty-packet"), dir, emptySet())
+        assertTrue(JsonFiles.read(Path.of(empty.packetPath), ReviewPacket::class.java).tasks.isEmpty())
+        val invalid = ReviewPackets.write(dir, setOf("target"), temp.resolve("invalid-packet"))
+        val template = JsonFiles.read(Path.of(invalid.templatePath), AnalysisReviewBatch::class.java)
+        assertTrue(template.items.isEmpty())
+        assertEquals(TaskState.INVALID, JsonFiles.read(Path.of(invalid.packetPath), ReviewPacket::class.java).tasks.single().state)
+    }
 }

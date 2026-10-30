@@ -4,17 +4,20 @@ import dev.dexlineage.io.Digests
 import dev.dexlineage.io.JsonFiles
 import dev.dexlineage.model.*
 import com.google.gson.JsonObject
+import com.google.gson.annotations.JsonAdapter
 
+@JsonAdapter(AnalysisCompatibilityCodec::class)
 data class AnalysisProfile(val schemaVersion: Int = SCHEMA_VERSION, val id: String = "",
     val discovery: Locator = Locator(), val nameCapture: String? = null,
     val locatorTemplate: LocatorTemplate? = null, val minConfidence: Confidence = Confidence.HIGH,
     val strategy: StrategySpec? = null, val strategyTemplate: StrategySpec? = null,
-    val parameterCaptures: Map<String, String> = emptyMap(), val rpcDrafts: RpcDraftOptions? = null)
+    val parameterCaptures: Map<String, String> = emptyMap(), val method: AnalysisMethodSpec? = null,
+    @Transient val compatibility: JsonObject? = null)
 
-data class RpcDraftOptions(val reviewServices: List<String> = emptyList(),
-    val requestSuffix: String = "Request", val responseSuffix: String = "Response")
+data class AnalysisMethodSpec(val methodId: String = "profile", val parameters: JsonObject = JsonObject())
 data class DiscoveryLead(val key: String, val owner: ClassRef, val suggestedName: String?,
     val captures: Map<String, String>, val matches: List<MatchFact>)
+@JsonAdapter(AnalysisCompatibilityCodec::class)
 data class AnalysisDiscovery(val schemaVersion: Int = SCHEMA_VERSION, val kind: String = "analysis-discovery",
     val discoveryId: String, val engineBuildId: String, val toolVersion: String = TOOL_VERSION, val jadxVersion: String = JADX_VERSION,
     val apk: Artifact, val profileSource: Artifact, val profile: AnalysisProfile,
@@ -22,13 +25,15 @@ data class AnalysisDiscovery(val schemaVersion: Int = SCHEMA_VERSION, val kind: 
     val matchCounts: Map<String, Int>, val conditionCounts: Map<String, Int>, val analysisDiagnostics: List<String>,
     val analysisMillis: Long, val createdAt: String,
     val baseFile: Artifact? = null, val baseKnowledge: VersionKnowledge? = null,
-    val rpcCalls: List<RpcCallObservation>? = null, val unresolvedPaths: List<UnresolvedPath>? = null) {
+    val unresolvedPaths: List<UnresolvedPath>? = null,
+    val methodArtifacts: List<ScenarioArtifactRef>? = null, @Transient val compatibility: JsonObject? = null) {
     fun fingerprint(): String = Digests.text(JsonFiles.encode(copy(discoveryId = "", createdAt = "",
         scan = scan.copy(elapsedMillis = 0), analysisMillis = 0)))
 }
 data class AnalysisDiscoveryResult(val schemaVersion: Int = SCHEMA_VERSION, val discoveryId: String,
     val leads: Int, val draftedRules: Int, val discoveryPath: String, val rulesPath: String?,
-    val evidence: List<EvidenceRecord>, val scan: ScanStats, val analysisMillis: Long, val catalogPath: String? = null)
+    val evidence: List<EvidenceRecord>, val scan: ScanStats, val analysisMillis: Long,
+    val artifacts: List<ScenarioArtifactRef> = emptyList())
 data class AnalysisRuleItem(val key: String = "", val semanticId: String? = null, val proposedName: String? = null,
     val locators: List<Locator> = emptyList(), val discoveryKey: String? = null,
     val strategy: StrategySpec? = null, val corpusTargetId: String? = null)
@@ -47,6 +52,7 @@ data class AnalysisTask(val taskId: String, val request: AnalysisRuleItem, val r
 data class IdentityReference(val file: Artifact, val knowledge: VersionKnowledge, val mappingFile: Artifact, val reportFile: Artifact)
 data class AnalysisAnchorTask(val key: String, val rule: RuleRevision, val resolution: Resolution?,
     val executionState: AnalysisExecutionState, val waitingFor: List<String> = emptyList())
+@JsonAdapter(AnalysisCompatibilityCodec::class)
 data class AnalysisRun(val schemaVersion: Int = SCHEMA_VERSION, val kind: String = "analysis-run",
     val runId: String, val engineBuildId: String, val toolVersion: String = TOOL_VERSION, val jadxVersion: String = JADX_VERSION,
     val apk: Artifact, val rulesFile: Artifact, val rules: AnalysisRuleFile,
@@ -54,7 +60,8 @@ data class AnalysisRun(val schemaVersion: Int = SCHEMA_VERSION, val kind: String
     val classInventory: Map<String, String>, val tasks: List<AnalysisTask>, val scan: ScanStats,
     val analysisDiagnostics: List<String>, val analysisMillis: Long, val createdAt: String,
     val anchorTasks: List<AnalysisAnchorTask> = emptyList(), val corpusFile: Artifact? = null, val corpus: ManualCorpus? = null,
-    val identityReferences: List<IdentityReference>? = null, val rpcCalls: List<RpcCallObservation>? = null) {
+    val identityReferences: List<IdentityReference>? = null, val methodArtifacts: List<ScenarioArtifactRef>? = null,
+    @Transient val compatibility: JsonObject? = null) {
     fun fingerprint(): String = Digests.text(JsonFiles.encode(copy(runId = "", createdAt = "", scan = scan.copy(elapsedMillis = 0),
         analysisMillis = 0, discovery = discovery?.copy(createdAt = "", scan = discovery.scan.copy(elapsedMillis = 0), analysisMillis = 0))))
 }

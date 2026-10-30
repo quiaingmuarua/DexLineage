@@ -10,7 +10,27 @@
 | `jadx` | Raw DEX facts, compiled strategy registry, application recipes, code rendering, Tiny and Mapping readback | `knowledge` |
 | `cli` | Scene commands, distribution and explicit integration checks | `analysis`, `migration`, `jadx` |
 
-The scenes do not call each other. `VersionKnowledge` is their handoff. Each scene owns its tasks, run fingerprint, review meaning and publication decisions. The project does not implement an Agent runtime, generic workflow service or concurrent scheduler.
+The scenes do not call each other. `VersionKnowledge` is their handoff. Each scene owns its tasks, run fingerprint, review meaning and publication decisions. Analysis has a finite stage coordinator for compiled analysis methods; it does not implement an Agent runtime, general graph scheduler or a second publication service.
+
+## Mechanism and analysis methods
+
+`MatchingHandler` is the compiled matching extension contract. A handler owns its parameter and producer validation, dependency kinds, scan requirements, matching function, evidence mode and typed observations. Registration is explicit. The registry looks up opaque strategy IDs and the engine applies shared APK identity, dependency, complete-scan and uniqueness invariants. The registry and engine do not classify RPCs or infer business names.
+
+Reusable matching capabilities bind actual objects and relationships and preserve uncertainty; they are not one-to-one wrappers around JADX getters. The Messages implementation owns its logger/Handler/RPC conventions, including the strategies historically named `grpc-java.*`. Those IDs remain stable for saved rules and do not claim cross-application coverage. A matching handler cannot submit Review or write Mapping.
+
+`AnalysisMethod` owns the analysis-side configuration, finite seed steps, discovery-to-draft transformation, grouping, task explanation and scenario reports. `messages.grpc` supplies the existing topic analysis and `profile` supplies the generic discovery/template flow. Analysis owns input freezing, execution, review and publication. Migration continues using the same matching handlers through its existing knowledge-driven lifecycle.
+
+Scenario observations have concrete DTOs and codecs owned by their scenario. The shared runtime freezes artifact kind/path/digest references without interpreting service/RPC/role. Historical schema-4 RPC fields are read and written only through compatibility codecs so existing hashes and saved publication replay retain their original wire layout. New optional fields are omitted when absent; old files are never normalized in place before their identities are checked.
+
+## Recoverable Analysis workspace
+
+`analysis run --method ... --config ... --work ...` freezes inputs and implementation and executes the method's seed steps, discovery, prepare and review-packet stages. `analysis status` is read-only. `analysis resume` verifies and advances the same execution. The Messages method declares three immutable seed rounds; the generic profile method has none. A new anchor can only be consumed through the next published snapshot.
+
+The workspace is a single-writer coordinator with a process file lock. Existing run files, Review transactions and knowledge packages remain the authorities for matching and decisions. Stage receipts reference the full formal output set and its digests. Attempts keep stable paths; a partial attempt is retained, and explicit resume uses a new attempt. Complete orphan outputs may be adopted only after normal operation-specific validation. A lone `discovery.json` or `knowledge.json` cannot establish completion without rules/catalogue or Mapping/report/evidence respectively.
+
+The selected review scope is frozen. Unreviewed executable tasks block at `WAITING_REVIEW`; invalid, inherited, rejected and deferred targets do not require artificial acceptance. Unreviewed tasks outside the scope do not block publication. Explicit resume after Review freezes transaction heads and uses the existing snapshot publication path. A completed workspace resumes idempotently and does not automatically publish later Review revisions. Changed inputs or implementation require a fresh workspace.
+
+`inspect --out` writes `review-packet.json`, `summary.md` and `review-template.json`. Task/proof identities, canonical-name provenance and evidence requirements are program-derived. Shared code evidence is referenced once with hashes and incomplete-rendering diagnostics. The template contains no acceptance judgment; copy it and provide actual semantics before submission. Review packet generation does not change candidates or publication policy.
 
 ## Matching and rules
 
@@ -51,7 +71,7 @@ METHOD results use the full owner plus original method name and descriptor. Two 
 
 ## Compiled strategies and dependencies
 
-The registry dispatches ordinary Kotlin code. Strategy implementations read facts/configuration and return candidate facts; they have no publication authority. No reflection-based package loader, script runtime or generic Agent workflow is involved. Application-specific behavior can remain in a Messages recipe package while reusable fact operations stay shared.
+The registry dispatches registered Kotlin handlers. Each handler validates its own configuration and dependencies, reads facts and returns candidate facts; it has no publication authority. No reflection-based package loader, script runtime or generic Agent workflow is involved. Application-specific behavior remains in a Messages package while reusable matching operations stay shared.
 
 | Strategy ID | Result | Dependency roles | Main configuration |
 |---|---|---|---|
@@ -76,7 +96,7 @@ Messages-specific strategies identify the logging-name role rather than assuming
 
 RPC related types retain typed construction facts: descriptor allocation, builder method owner, both role-field declaration types and actual marshaller implementation types. The `marshaller` role requires one common declaration interface with compatible implementations. An outer RPC method returning `Object` does not identify its descriptor type. Multiple constructions are considered together: different complete role types remain ambiguous, and any unresolved construction downgrades all known related-role candidates to UNKNOWN before normal class deduplication can prefer PASS. A dependency whose complete construction cannot be reproduced fails execution rather than manufacturing NO_MATCH. Related-type rules inherit service/RPC/label configuration from the verified producer, and cannot override it independently.
 
-## gRPC library facts and RPC catalogue
+## Messages gRPC shapes and RPC catalogue
 
 The gRPC strategies reuse the Descriptor construction reader used by existing Messages RPC rules. Their starting point is a current-APK full-method-name anchor. A session indexes references to that exact owner/name/signature and caches the corresponding call/construction catalogue. Several methods constructing one RPC do not have to become a unique METHOD: class queries union all matching role types and then apply normal entity uniqueness.
 
@@ -84,7 +104,7 @@ The catalogue retains direct call positions, captured service/RPC strings, const
 
 When an argument expression reaches the local depth budget, a finite call-result token retains its producer site and method without pretending to know its value. This prevents unrelated unknown values from being treated as the same RPC name. The reader can also prove a limited boolean-check/exception-formatting shape used by configuration validation: normal execution returns immediately, and failure only formats and throws an argument exception. This proof examines the called code; it does not exempt an application address or a method name. Opaque helpers, field escapes and returned names remain unresolved.
 
-Analysis owns RPC draft grouping and naming. An optional `rpcDrafts` profile section selects review services and request/response suggestion suffixes. It never narrows APK discovery or class matching. All relations supporting one Proto class produce one task and one finite selectors-set rule. Capture values stay separate from suggested names; conflicting suggestions remain unnamed. RPC caller identities are evidence, while discovery owner checks refer to the actual Proto class.
+The Messages Analysis method owns RPC draft grouping and naming. Its `method.parameters` select review services and request/response suggestion suffixes; the compatibility codec accepts the former `rpcDrafts` shape. These options never narrow APK discovery or class matching. All relations supporting one Proto class produce one task and one finite selectors-set rule. Capture values stay separate from suggested names; conflicting suggestions remain unnamed. RPC caller identities are evidence, while discovery owner checks refer to the actual Proto class.
 
 Explicit same-APK `--reference-knowledge` inputs are frozen in the Analysis run. Current confirmed bindings can supply semantic IDs and canonical names after unique matching, without importing their Review, anchors or old proof into the new decision. Reference-only entries require fresh matching and semantic review before publication; unrelated reference entries are not copied. The report records identity provenance, and the publication retains its own evidence closure. Base-knowledge failure protection continues to apply only to the base snapshot.
 

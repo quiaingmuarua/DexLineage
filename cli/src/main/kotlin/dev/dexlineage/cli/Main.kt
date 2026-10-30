@@ -2,6 +2,8 @@ package dev.dexlineage.cli
 
 import dev.dexlineage.analysis.AnalysisService
 import dev.dexlineage.analysis.ResearchService
+import dev.dexlineage.analysis.ReviewPackets
+import dev.dexlineage.analysis.workspace.WorkspaceService
 import dev.dexlineage.migration.MigrationService
 import dev.dexlineage.io.*
 import dev.dexlineage.knowledge.KnowledgeFiles
@@ -11,13 +13,16 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 
 private const val HELP = """DexLineage 0.4.0
+  analysis run       --method <messages.grpc|profile> --config <config.json> --work <new-directory>
+  analysis status    --work <directory>
+  analysis resume    --work <directory>
   analysis import-jadx --apk <apk> --project <project.jadx> --out <new-directory>
   analysis targets   --corpus <corpus.json> [--run <directory>] [--state ...] [--offset N] [--limit N]
   analysis research  --corpus <corpus.json> --target <target-id,...> --out <new-directory>
   analysis discover  --apk <apk> --profile <profile.json> --out <new-directory> [--base-knowledge <knowledge.json>]
   analysis prepare   --apk <apk> --rules <rules.json> --run <new-directory> [--corpus <corpus.json>] [--base-knowledge <knowledge.json>] [--reference-knowledge <knowledge.json> ...]
   analysis tasks     --run <directory> [--state UNREVIEWED|ACCEPTED|REJECTED|DEFERRED|INVALID|ALL] [--offset N] [--limit N] [--service <exact-service> ...]
-  analysis inspect   --run <directory> --task <task-id,...>
+  analysis inspect   --run <directory> --task <task-id,...> [--out <new-directory>]
   analysis submit    --run <directory> --review <review-batch.json>
   analysis publish   --run <directory> --out <new-directory> [--at <previous-report.json>]
   migration prepare  --knowledge <knowledge.json> --source-apk <apk> --target-apk <apk> --run <new-directory> [--min-confidence HIGH] [--rules <overrides.json>] [--target-base <knowledge.json>]
@@ -43,6 +48,8 @@ fun runCli(args: Array<String>): Int = try {
             requireInput(args.size >= 2, "Specify a scenario and operation; run --help")
             val scene = args[0]; val operation = args[1]
             val allowed = when ("$scene $operation") {
+                "analysis run" -> setOf("--method", "--config", "--work")
+                "analysis status", "analysis resume" -> setOf("--work")
                 "analysis import-jadx" -> setOf("--apk", "--project", "--out")
                 "analysis targets" -> setOf("--corpus", "--run", "--state", "--offset", "--limit")
                 "analysis research" -> setOf("--corpus", "--target", "--out")
@@ -50,7 +57,7 @@ fun runCli(args: Array<String>): Int = try {
                 "analysis prepare" -> setOf("--apk", "--rules", "--run", "--base-knowledge", "--corpus", "--reference-knowledge")
                 "analysis tasks" -> setOf("--run", "--state", "--offset", "--limit", "--service")
                 "migration tasks" -> setOf("--run", "--state", "--offset", "--limit")
-                "analysis inspect" -> setOf("--run", "--task")
+                "analysis inspect" -> setOf("--run", "--task", "--out")
                 "migration inspect" -> setOf("--run", "--task", "--candidate")
                 "analysis submit", "migration submit" -> setOf("--run", "--review")
                 "analysis publish", "migration publish" -> setOf("--run", "--out", "--at")
@@ -84,6 +91,9 @@ fun runCli(args: Array<String>): Int = try {
                 return selections
             }
             val result: Any = when ("$scene $operation") {
+                "analysis run" -> WorkspaceService.run(value("--method"), path("--config"), path("--work"))
+                "analysis status" -> WorkspaceService.status(path("--work"))
+                "analysis resume" -> WorkspaceService.resume(path("--work"))
                 "analysis import-jadx" -> AnalysisService.importJadx(path("--apk"), path("--project"), path("--out"))
                 "analysis targets" -> AnalysisService.targets(path("--corpus"), options["--run"]?.single()?.let(Path::of), options["--state"]?.single(), number("--offset", 0), number("--limit", 20))
                 "analysis research" -> ResearchService.research(path("--corpus"), value("--target").split(',').map(String::trim), path("--out"))
@@ -95,8 +105,11 @@ fun runCli(args: Array<String>): Int = try {
                         "waiting" to it.tasks.count { task -> task.waitingFor.isNotEmpty() },
                         "inherited" to it.tasks.count { task -> task.executionState == dev.dexlineage.analysis.AnalysisExecutionState.INHERITED }, "anchors" to it.anchorTasks.size)
                 }
-                "analysis tasks" -> AnalysisService.tasks(path("--run"), options["--state"]?.single(), number("--offset", 0), number("--limit", 20), options["--service"].orEmpty().toSet())
-                "analysis inspect" -> AnalysisService.inspect(path("--run"), value("--task").split(',').toSet())
+                "analysis tasks" -> AnalysisService.tasks(path("--run"), options["--state"]?.single(), number("--offset", 0), number("--limit", 20),
+                    options["--service"]?.toSet()?.let { mapOf("service" to it) }.orEmpty())
+                "analysis inspect" -> options["--out"]?.single()?.let { out ->
+                    ReviewPackets.write(path("--run"), value("--task").split(',').toSet(), Path.of(out))
+                } ?: AnalysisService.inspect(path("--run"), value("--task").split(',').toSet())
                 "analysis submit" -> AnalysisService.submit(path("--run"), path("--review"))
                 "analysis publish" -> AnalysisService.publish(path("--run"), path("--out"), options["--at"]?.single()?.let(Path::of))
                 "migration prepare" -> {

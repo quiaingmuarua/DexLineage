@@ -94,7 +94,7 @@ internal object AnalysisPolicy {
         .mapNotNull { it.field?.call?.declaringType }.distinct().mapNotNull { descriptor ->
             run.classInventory[descriptor]?.let { ClassRef(run.apk.sha256, descriptor, it) }
         }.toSet()
-    private fun requiredRefs(run: AnalysisRun, task: AnalysisTask): Set<ClassRef> = setOfNotNull(task.resolution?.uniqueRef) + factories(run, task) +
+    internal fun requiredRefs(run: AnalysisRun, task: AnalysisTask): Set<ClassRef> = setOfNotNull(task.resolution?.uniqueRef) + factories(run, task) +
         task.resolution?.let(::proofRefs).orEmpty()
 
     /** Both the selected entity and the resolved dependency chain are part of semantic review. */

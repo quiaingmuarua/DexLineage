@@ -45,17 +45,20 @@ data class MatchFact(val owner: ClassRef, val status: MatchStatus, val factors: 
 data class FactTrace(val owner: ClassRef, val methodDescriptor: String?, val codeUnitOffset: Int?, val kind: String, val detail: String)
 data class FieldAnalysis(val bindings: List<FieldBinding>, val code: List<DecompiledClass>, val diagnostics: List<String>, val elapsedMillis: Long,
     val unavailableOwners: Set<String> = emptySet())
-/** An unresolved construction path has a source location but need not have a defensible entity candidate. */
+/** Schema-4 wire record. Legacy optional RPC fields are retained for historical digest validation only. */
 data class UnresolvedPath(val source: MethodRef, val codeUnitOffset: Int?, val reason: String,
     val service: String? = null, val rpc: String? = null, val role: String? = null)
 
-/** Raw invocation catalogue for discovery; no name or publication authority. */
-data class RpcCallObservation(val source: MethodRef, val codeUnitOffset: Int, val service: String?, val rpc: String?,
-    val status: String, val requestTypes: List<ClassRef> = emptyList(), val responseTypes: List<ClassRef> = emptyList(),
-    val diagnostics: List<String> = emptyList())
+/** A matcher has already scoped this uncertainty to its rule; the engine does not interpret business selectors. */
+data class MatchUncertainty(val source: MethodRef, val codeUnitOffset: Int?, val reason: String) {
+    fun toWire(): UnresolvedPath = UnresolvedPath(source, codeUnitOffset, reason)
+}
+
+/** A typed scenario codec owns the file contents; shared execution owns only its immutable address. */
+data class ScenarioArtifactRef(val kind: String, val path: String, val sha256: String)
 
 data class QueryResult(val matches: List<MatchFact>, val scan: ScanResult, val analysis: FieldAnalysis?,
-    val rpcCalls: List<RpcCallObservation>? = null, val unresolvedPaths: List<UnresolvedPath>? = null)
+    val artifacts: List<ScenarioArtifactRef> = emptyList(), val unresolvedPaths: List<MatchUncertainty> = emptyList())
 
 data class StrategySpec(val strategyId: String = "", val parameters: com.google.gson.JsonObject = com.google.gson.JsonObject(),
     val resultKind: EntityKind = EntityKind.CLASS, val requires: Map<String, String> = emptyMap())
@@ -76,7 +79,7 @@ data class Resolution(val schemaVersion: Int = SCHEMA_VERSION, val resolutionId:
     val uniqueMethod: MethodRef? get() = uniqueEntity?.method
 }
 data class ResolutionBatch(val resolutions: Map<String, Resolution>, val scan: ScanResult, val analysis: FieldAnalysis?,
-    val waiting: Map<String, List<String>> = emptyMap(), val rpcCalls: List<RpcCallObservation>? = null)
+    val waiting: Map<String, List<String>> = emptyMap(), val artifacts: List<ScenarioArtifactRef> = emptyList())
 
 data class KnowledgeEvidence(val evidenceId: String, val ref: ClassRef, val javaPath: String, val javaSha256: String,
     val smaliPath: String?, val smaliSha256: String?, val incomplete: Boolean, val diagnostics: List<String>)

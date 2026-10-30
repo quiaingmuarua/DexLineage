@@ -1,5 +1,7 @@
 package dev.dexlineage.rules.recipes
 
+import dev.dexlineage.messages.RpcRecipe
+
 import com.google.gson.JsonParser
 import dev.dexlineage.io.ExecutionException
 import dev.dexlineage.knowledge.RuleProofs
