@@ -20,6 +20,7 @@ import kotlin.test.*
 object V04CaseAcceptance {
     private data class RoundPath(val run: String = "", val output: String = "")
     private data class PublishedRuleRequirement(val strategyId: String = "", val parameters: JsonObject = JsonObject(), val minimum: Int = 1)
+    private data class PreservedInputs(val schemaVersion: Int = SCHEMA_VERSION, val artifacts: List<Artifact> = emptyList())
     private data class Manifest(
         val schemaVersion: Int = SCHEMA_VERSION,
         val corpus: String = "",
@@ -31,6 +32,10 @@ object V04CaseAcceptance {
         val expectedClassTargets: Int? = null,
         val requiredStrategyIds: List<String> = emptyList(),
         val requiredPublishedRules: List<PublishedRuleRequirement> = emptyList(),
+        val selectedCorpusTargets: List<String> = emptyList(),
+        val controlKnowledge: String? = null,
+        val controlNames: List<String> = emptyList(),
+        val preservedArtifactsFile: String? = null,
     )
     private data class CheckedRound(val runId: String, val apk: Artifact, val output: Path, val knowledge: VersionKnowledge)
 
@@ -58,6 +63,17 @@ object V04CaseAcceptance {
         val corpusPath = resolve(manifest.corpus)
         val corpus = ManualCorpusFiles.read(corpusPath)
         remember(Digests.artifact(corpusPath)); remember(corpus.apk); remember(corpus.project)
+        val selectedTargets = manifest.selectedCorpusTargets.toSet()
+        require(selectedTargets.size == manifest.selectedCorpusTargets.size && selectedTargets.all { id -> corpus.targets.any { it.targetId == id } }) {
+            "Slice targets must be distinct original corpus targets"
+        }
+        manifest.preservedArtifactsFile?.let { value ->
+            val file = resolve(value)
+            remember(Digests.artifact(file))
+            val preserved = JsonFiles.read(file, PreservedInputs::class.java)
+            require(preserved.schemaVersion == SCHEMA_VERSION && preserved.artifacts.isNotEmpty()) { "Invalid preserved-input snapshot" }
+            preserved.artifacts.forEach(::remember)
+        }
         if (manifest.expectedAnnotationCounts.isNotEmpty()) assertEquals(manifest.expectedAnnotationCounts, corpus.annotationCounts)
         manifest.expectedClassTargets?.let { assertEquals(it, corpus.targets.size) }
         val imported = AnalysisService.importJadx(Path.of(corpus.apk.path), Path.of(corpus.project.path), out.resolve("fresh-corpus"))
@@ -160,6 +176,10 @@ object V04CaseAcceptance {
             assertEquals(run.apk.sha256, knowledge.artifact.sha256)
             if (main) {
                 assertEquals(corpus.corpusId, run.corpus?.corpusId, "Main rounds must retain the complete manual corpus")
+                if (selectedTargets.isNotEmpty()) {
+                    assertEquals(selectedTargets, run.tasks.map { it.request.corpusTargetId }.toSet(), "Slice changed its selected corpus targets")
+                    assertEquals(selectedTargets.size, run.tasks.size)
+                }
                 val report = JsonParser.parseString(Files.readString(publication.resolve("report.json"))).asJsonObject
                 val targets = report.getAsJsonArray("corpusTargets")
                 assertEquals(corpus.targets.size, targets.size(), "Publication omitted unconfigured corpus targets")
@@ -182,6 +202,20 @@ object V04CaseAcceptance {
         val sourceRounds = manifest.analysisRounds.mapIndexed { index, location -> analysisRound(location, "analysis-${index + 1}", true) }
         val source = sourceRounds.last()
         assertTrue(source.knowledge.entries.isNotEmpty(), "Source acceptance cannot be an empty Mapping")
+        val controlChecks = manifest.controlKnowledge?.let { value ->
+            val file = resolve(value)
+            remember(Digests.artifact(file))
+            val baseline = KnowledgeFiles.read(file)
+            assertEquals(source.apk.sha256, baseline.artifact.sha256)
+            manifest.controlNames.map { name ->
+                val old = baseline.entries.single { it.name == name }
+                val current = source.knowledge.entries.single { it.name == name }
+                assertEquals(old.semanticId, current.semanticId, "An existing control must keep its semantic identity")
+                assertEquals(old.binding, current.binding)
+                mapOf("name" to name, "semanticId" to current.semanticId, "sameBinding" to true, "countedAsNew" to false)
+            }
+        }.orEmpty()
+        require(manifest.controlNames.isEmpty() || manifest.controlKnowledge != null) { "Control names require a baseline knowledge package" }
 
         fun migrationRound(location: RoundPath, label: String): CheckedRound {
             val dir = resolve(location.run)
@@ -260,6 +294,12 @@ object V04CaseAcceptance {
         }
         val sourceReadback = readback(source.knowledge, source.output, "source-readback")
         val targetReadback = readback(target.knowledge, target.output, "target-readback")
+        val extraReadbacks = shapes.groupBy { it.apk.sha256 }.values.mapIndexed { index, rounds ->
+            val final = rounds.last()
+            mapOf("apkSha256" to final.apk.sha256, "confirmed" to final.knowledge.entries.size,
+                "unresolved" to final.knowledge.unresolved.size,
+                "readback" to readback(final.knowledge, final.output, "extra-$index-readback"))
+        }
         val upgrades = manifest.upgradedV03.mapIndexed { index, value ->
             val configuredPath = resolve(value)
             val path = if (Files.isDirectory(configuredPath)) configuredPath.resolve("knowledge.json") else configuredPath
@@ -273,11 +313,13 @@ object V04CaseAcceptance {
         JsonFiles.writeNew(out.resolve("acceptance.json"), mapOf("schemaVersion" to SCHEMA_VERSION, "kind" to "v04-real-case-acceptance",
             "caseManifest" to Digests.artifact(manifestPath), "corpusId" to corpus.corpusId, "annotationCounts" to corpus.annotationCounts,
             "classTargets" to corpus.targets.size, "matching" to matchingRecords, "publicationReplays" to replayRecords,
+            "selectedCorpusTargets" to manifest.selectedCorpusTargets, "controlChecks" to controlChecks,
             "sourceConfirmed" to source.knowledge.entries.size, "sourceAnchors" to source.knowledge.anchors.size,
             "targetConfirmed" to target.knowledge.entries.size, "targetAnchors" to target.knowledge.anchors.size, "targetUnresolved" to target.knowledge.unresolved.size,
             "sourceStrategyCounts" to strategyCounts(source.knowledge), "targetStrategyCounts" to strategyCounts(target.knowledge),
             "requiredPublishedRules" to publishedRuleChecks,
             "shapeRounds" to shapes.map { mapOf("runId" to it.runId, "apkSha256" to it.apk.sha256, "anchors" to it.knowledge.anchors.size) },
+            "extraVersionReadbacks" to extraReadbacks,
             "sourceReadback" to sourceReadback, "targetReadback" to targetReadback, "upgradedV03" to upgrades,
             "inputHashesUnchanged" to inputArtifacts.values.toList(), "freshMatchingReproduced" to true, "publicationReplayIdentical" to true))
         println("v0.4 real-case acceptance: ${out.resolve("acceptance.json")}")

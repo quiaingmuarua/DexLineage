@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 4,
+  "kind": "analysis-rules",
+  "anchors": [
+    {
+      "key": "read-rpc",
+      "strategy": {
+        "strategyId": "messages.rpc-descriptor",
+        "resultKind": "METHOD",
+        "parameters": { "service": "example.Service", "rpc": "Read" }
+      }
+    }
+  ],
+  "items": [
+    {
+      "key": "descriptor",
+      "proposedName": "ReviewedDescriptor",
+      "strategy": {
+        "strategyId": "messages.rpc-related-type",
+        "resultKind": "CLASS",
+        "requires": { "descriptor": "read-rpc" },
+        "parameters": { "role": "descriptor" }
+      }
+    },
+    {
+      "key": "builder",
+      "proposedName": "ReviewedDescriptorBuilder",
+      "strategy": {
+        "strategyId": "messages.rpc-related-type",
+        "resultKind": "CLASS",
+        "requires": { "descriptor": "read-rpc" },
+        "parameters": { "role": "builder" }
+      }
+    },
+    {
+      "key": "marshaller",
+      "proposedName": "ReviewedMarshaller",
+      "strategy": {
+        "strategyId": "messages.rpc-related-type",
+        "resultKind": "CLASS",
+        "requires": { "descriptor": "read-rpc" },
+        "parameters": { "role": "marshaller" }
+      }
+    }
+  ]
+}

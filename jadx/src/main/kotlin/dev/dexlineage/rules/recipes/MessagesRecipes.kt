@@ -12,7 +12,7 @@ internal object MessagesRecipes {
         "messages.logger-fields" -> loggerFields(s, rule, dependencies.getValue("factory"))
         "messages.handler-name-method" -> handlerNameMethod(s, rule, dependencies.getValue("lifecycle"))
         "messages.named-handler" -> namedHandlers(s, rule, dependencies.getValue("nameMethod"))
-        "messages.rpc-descriptor", "messages.rpc-message" -> RpcRecipe.execute(s, rule, dependencies)
+        "messages.rpc-descriptor", "messages.rpc-message", "messages.rpc-related-type" -> RpcRecipe.execute(s, rule, dependencies)
         else -> error("Unregistered execution strategy ${rule.strategyId}")
     }
 

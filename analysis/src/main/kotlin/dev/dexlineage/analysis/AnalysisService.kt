@@ -457,9 +457,7 @@ object AnalysisService {
         RuleProofs.validateDependencies(definitions, targets, available)
         val producers = available.associate { it.key to it.rule } + definitions
         (definitions.values + targets).forEach { rule ->
-            StrategyRegistry.dependencyKinds(rule).forEach { (role, kind) ->
-                requireInput(producers[rule.requires.getValue(role)]?.resultKind == kind, "Dependency $role requires $kind")
-            }
+            StrategyRegistry.validateDependencyDefinitions(rule, producers)
         }
     }
 

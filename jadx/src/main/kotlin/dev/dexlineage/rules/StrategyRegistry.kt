@@ -18,16 +18,31 @@ object StrategyRegistry {
         "messages.named-handler" to setOf("component"),
         "messages.rpc-descriptor" to setOf("service", "rpc", "requestLabel", "responseLabel", "nameLabel"),
         "messages.rpc-message" to setOf("service", "rpc", "role", "requestLabel", "responseLabel", "nameLabel"),
+        "messages.rpc-related-type" to setOf("role"),
     )
     private val roles = mapOf("builtin.method-signature" to mapOf("owner" to EntityKind.CLASS),
         "messages.logger-fields" to mapOf("factory" to EntityKind.METHOD),
         "messages.handler-name-method" to mapOf("lifecycle" to EntityKind.CLASS),
         "messages.named-handler" to mapOf("nameMethod" to EntityKind.METHOD),
-        "messages.rpc-descriptor" to emptyMap(), "messages.rpc-message" to mapOf("descriptor" to EntityKind.METHOD))
+        "messages.rpc-descriptor" to emptyMap(), "messages.rpc-message" to mapOf("descriptor" to EntityKind.METHOD),
+        "messages.rpc-related-type" to mapOf("descriptor" to EntityKind.METHOD))
 
     fun dependencyKinds(rule: RuleRevision): Map<String, EntityKind> {
         validate(rule)
         return if (rule.strategyId == "builtin.locators") emptyMap() else roles.getValue(rule.strategyId)
+    }
+
+    /** Definition errors are known before an anchor has a unique binding, so they must not wait. */
+    fun validateDependencyDefinitions(rule: RuleRevision, producers: Map<String, RuleRevision>) {
+        dependencyKinds(rule).forEach { (role, expected) ->
+            val key = rule.requires.getValue(role)
+            val producer = producers[key] ?: throw ValidationException("Missing dependency definition: $key")
+            requireInput(producer.resultKind == expected, "Dependency $role requires $expected")
+            if (rule.strategyId == "messages.rpc-related-type" && role == "descriptor") {
+                requireInput(producer.strategyId == "messages.rpc-descriptor", "RPC related type requires an anchor produced by messages.rpc-descriptor")
+                validate(producer)
+            }
+        }
     }
 
     fun validate(rule: RuleRevision) = checkedInput("matching strategy") {
@@ -53,8 +68,9 @@ object StrategyRegistry {
             rule.parameters.array("parameterTypes").orEmpty().forEach { requireInput(typeDescriptor(it, false), "Invalid parameter type: $it") }
             rule.parameters.string("returnType")?.let { requireInput(typeDescriptor(it, true), "Invalid return type: $it") }
             if (rule.strategyId == "messages.handler-name-method") requireInput(rule.parameters.has("logLiteral"), "Missing logLiteral")
-            if (rule.strategyId.startsWith("messages.rpc-")) requireInput(rule.parameters.has("service") && rule.parameters.has("rpc"), "RPC strategies require service and rpc")
+            if (rule.strategyId in setOf("messages.rpc-descriptor", "messages.rpc-message")) requireInput(rule.parameters.has("service") && rule.parameters.has("rpc"), "RPC strategies require service and rpc")
             if (rule.strategyId == "messages.rpc-message") requireInput(rule.parameters.string("role") in setOf("request", "response"), "RPC message role must be request or response")
+            if (rule.strategyId == "messages.rpc-related-type") requireInput(rule.parameters.string("role") in setOf("descriptor", "builder", "marshaller"), "RPC related type role must be descriptor, builder or marshaller")
             rule.parameters.array("requiredFlags")?.forEach { requireInput(it in flags, "Unknown access flag: $it") }
         }
     }
@@ -67,6 +83,7 @@ object StrategyRegistry {
             requireInput(anchor.binding.owner.apkSha256 == artifact.sha256, "Dependency belongs to another APK")
             requireInput(anchor.binding.kind == roles.getValue(rule.strategyId).getValue(role), "Dependency $role has wrong entity kind")
         }
+        validateDependencyDefinitions(rule, resolved.values.associate { it.key to it.rule })
         return resolved
     }
 

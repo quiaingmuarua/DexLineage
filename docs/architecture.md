@@ -61,6 +61,7 @@ The registry dispatches ordinary Kotlin code. Strategy implementations read fact
 | `messages.named-handler` | CLASS | `nameMethod`: METHOD | Optional component name |
 | `messages.rpc-descriptor` | METHOD | None | `service`, `rpc`, optional descriptor field-label configuration |
 | `messages.rpc-message` | CLASS | `descriptor`: METHOD | Same RPC identity and `role`: request or response |
+| `messages.rpc-related-type` | CLASS | `descriptor`: METHOD produced by `messages.rpc-descriptor` | `role`: descriptor, builder or marshaller; RPC identity and effective labels inherited from producer |
 
 `requires` maps a local role to an anchor key, for example `{"factory":"logger-factory"}`. A key is a lookup into the frozen current-APK knowledge, not a displayed name or an old obfuscated descriptor. A resolved dependency can legitimately constrain a search to all implementations of its interface or all uses of its factory; it cannot constrain the search to a desired answer list.
 
@@ -70,6 +71,8 @@ Multi-round execution is explicit: prepare → publish → new prepare with a ba
 
 Messages-specific strategies identify the logging-name role rather than assuming every no-argument String method has that role. RPC strategies bind service, RPC, builder and request/response roles in one construction, supporting the observed static marshaller factory and constructor forms. Unsupported flow remains UNKNOWN. Source/target symbol names, input corpora and test oracle identities do not choose candidates.
 
+RPC related types retain typed construction facts: descriptor allocation, builder method owner, both role-field declaration types and actual marshaller implementation types. The `marshaller` role requires one common declaration interface with compatible implementations. An outer RPC method returning `Object` does not identify its descriptor type. Multiple constructions are considered together: different complete role types remain ambiguous, and any unresolved construction downgrades all known related-role candidates to UNKNOWN before normal class deduplication can prefer PASS. A dependency whose complete construction cannot be reproduced fails execution rather than manufacturing NO_MATCH. Related-type rules inherit service/RPC/label configuration from the verified producer, and cannot override it independently.
+
 ## Manual annotation corpus
 
 `analysis import-jadx` accepts the observed JADX `projectVersion=1` rename format. It preserves every original annotation and verifies class, field and method references against the supplied APK. Local variable positions are retained as background; they are not claimed to be cross-version identities.
@@ -77,6 +80,8 @@ Messages-specific strategies identify the logging-name role rather than assuming
 `ManualCorpus` freezes the APK/project digests and creates class targets with stable IDs. An Analysis item can link `corpusTargetId`; its unique result must equal the imported source identity after unrestricted matching. Import does not establish confirmed knowledge. Source aliases remain distinct from captures and require explicit Analysis review when published or changed.
 
 `analysis targets --corpus ... [--run ...]` reports the whole corpus, including UNCONFIGURED targets. The run keeps the complete corpus reference and reports its target ledger alongside configured tasks; newly discovered tasks outside that corpus are listed separately. Application-specific annotation counts belong in private acceptance data, not production logic.
+
+`analysis research --corpus ... --target ... --out ...` provides a pre-rule investigation surface for selected original corpus entities. It freezes corpus/APK/implementation identity and publishes `research.json` with owner annotations, raw member and direct-reference facts, and presentation evidence. Target selection never enters a matcher. Research has no AnalysisRun, Resolution, Review or naming authority; its evidence namespace differs from later executions and cannot satisfy their review identity checks. Raw input errors abort, while partial Java/Smali limitations remain recorded. Direct references are observations, not a recursive call graph or inferred data flow.
 
 ## Analysis discovery and rules files
 
