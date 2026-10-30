@@ -42,6 +42,14 @@ Both files may be combined with a manual corpus imported by `analysis import-jad
 
 After source publication, Migration consumes the same knowledge file. Keep `--knowledge` fixed across target rounds and use `--target-base` for the previous target publication. Generic and Messages-specific strategy implementations are compiled into the project. Real application configuration remains local; these examples contain only public illustrative values.
 
+## gRPC topic discovery
+
+`grpc-anchor-rules.json` seeds a Descriptor method/class and then the full-method-name METHOD anchor using three prepare/publish rounds. Only the initial illustrative service/RPC must be replaced with a known observation. No obfuscated class or method names are configured.
+
+`grpc-discovery-profile.json` consumes that method anchor and discovers its direct callers throughout the APK. It emits a call catalogue and class rules containing exact `{service, rpc, role}` selectors. `rpcDrafts.reviewServices` guides review only. The generated rules still match every relevant construction in the full APK, and a shared message type gets one class task with all its roles.
+
+After prepare, use repeated `analysis tasks --service <full-service>` options to inspect the chosen scope. Optional repeated `analysis prepare --reference-knowledge <knowledge.json>` inputs allow identity reuse from other same-APK packages after unique matching. They do not supply a review or allow a candidate to be chosen manually.
+
 ## Historical reference
 
 `case.json` is a **legacy S1 schema-version-1 reference**. Current Analysis/Migration commands do not consume it. Upgrade a completed S1 run and output explicitly with `knowledge import-s1`; upgrade schema 2 knowledge with `knowledge import-v02`, or schema 3 knowledge with `knowledge import-v03`. For inherited v0.3 entries, supply earlier Review-bearing packages through the explicit history manifest when requested. The original inputs remain unchanged. See [upgrade commands](../README.md#upgrade-historical-knowledge-explicitly).

@@ -45,7 +45,17 @@ data class MatchFact(val owner: ClassRef, val status: MatchStatus, val factors: 
 data class FactTrace(val owner: ClassRef, val methodDescriptor: String?, val codeUnitOffset: Int?, val kind: String, val detail: String)
 data class FieldAnalysis(val bindings: List<FieldBinding>, val code: List<DecompiledClass>, val diagnostics: List<String>, val elapsedMillis: Long,
     val unavailableOwners: Set<String> = emptySet())
-data class QueryResult(val matches: List<MatchFact>, val scan: ScanResult, val analysis: FieldAnalysis?)
+/** An unresolved construction path has a source location but need not have a defensible entity candidate. */
+data class UnresolvedPath(val source: MethodRef, val codeUnitOffset: Int?, val reason: String,
+    val service: String? = null, val rpc: String? = null, val role: String? = null)
+
+/** Raw invocation catalogue for discovery; no name or publication authority. */
+data class RpcCallObservation(val source: MethodRef, val codeUnitOffset: Int, val service: String?, val rpc: String?,
+    val status: String, val requestTypes: List<ClassRef> = emptyList(), val responseTypes: List<ClassRef> = emptyList(),
+    val diagnostics: List<String> = emptyList())
+
+data class QueryResult(val matches: List<MatchFact>, val scan: ScanResult, val analysis: FieldAnalysis?,
+    val rpcCalls: List<RpcCallObservation>? = null, val unresolvedPaths: List<UnresolvedPath>? = null)
 
 data class StrategySpec(val strategyId: String = "", val parameters: com.google.gson.JsonObject = com.google.gson.JsonObject(),
     val resultKind: EntityKind = EntityKind.CLASS, val requires: Map<String, String> = emptyMap())
@@ -60,13 +70,13 @@ data class Resolution(val schemaVersion: Int = SCHEMA_VERSION, val resolutionId:
     val apkSha256: String, val rule: RuleRevision, val engineVersion: String = TOOL_VERSION,
     val engineBuildId: String, val searchScope: String = "apk-all-dex",
     val status: ResolutionStatus, val candidates: List<ResolutionCandidate>, val matches: List<MatchFact>,
-    val dependencies: Map<String, SupportAnchor> = emptyMap()) {
+    val dependencies: Map<String, SupportAnchor> = emptyMap(), val unresolvedPaths: List<UnresolvedPath>? = null) {
     val uniqueEntity: EntityRef? get() = if (status == ResolutionStatus.UNIQUE) candidates.single().entity else null
     val uniqueRef: ClassRef? get() = uniqueEntity?.takeIf { it.kind == EntityKind.CLASS }?.owner
     val uniqueMethod: MethodRef? get() = uniqueEntity?.method
 }
 data class ResolutionBatch(val resolutions: Map<String, Resolution>, val scan: ScanResult, val analysis: FieldAnalysis?,
-    val waiting: Map<String, List<String>> = emptyMap())
+    val waiting: Map<String, List<String>> = emptyMap(), val rpcCalls: List<RpcCallObservation>? = null)
 
 data class KnowledgeEvidence(val evidenceId: String, val ref: ClassRef, val javaPath: String, val javaSha256: String,
     val smaliPath: String?, val smaliSha256: String?, val incomplete: Boolean, val diagnostics: List<String>)

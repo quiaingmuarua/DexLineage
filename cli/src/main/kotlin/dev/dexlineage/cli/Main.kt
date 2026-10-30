@@ -15,8 +15,8 @@ private const val HELP = """DexLineage 0.4.0
   analysis targets   --corpus <corpus.json> [--run <directory>] [--state ...] [--offset N] [--limit N]
   analysis research  --corpus <corpus.json> --target <target-id,...> --out <new-directory>
   analysis discover  --apk <apk> --profile <profile.json> --out <new-directory> [--base-knowledge <knowledge.json>]
-  analysis prepare   --apk <apk> --rules <rules.json> --run <new-directory> [--corpus <corpus.json>] [--base-knowledge <knowledge.json>]
-  analysis tasks     --run <directory> [--state UNREVIEWED|ACCEPTED|REJECTED|DEFERRED|INVALID|ALL] [--offset N] [--limit N]
+  analysis prepare   --apk <apk> --rules <rules.json> --run <new-directory> [--corpus <corpus.json>] [--base-knowledge <knowledge.json>] [--reference-knowledge <knowledge.json> ...]
+  analysis tasks     --run <directory> [--state UNREVIEWED|ACCEPTED|REJECTED|DEFERRED|INVALID|ALL] [--offset N] [--limit N] [--service <exact-service> ...]
   analysis inspect   --run <directory> --task <task-id,...>
   analysis submit    --run <directory> --review <review-batch.json>
   analysis publish   --run <directory> --out <new-directory> [--at <previous-report.json>]
@@ -47,8 +47,9 @@ fun runCli(args: Array<String>): Int = try {
                 "analysis targets" -> setOf("--corpus", "--run", "--state", "--offset", "--limit")
                 "analysis research" -> setOf("--corpus", "--target", "--out")
                 "analysis discover" -> setOf("--apk", "--profile", "--out", "--base-knowledge")
-                "analysis prepare" -> setOf("--apk", "--rules", "--run", "--base-knowledge", "--corpus")
-                "analysis tasks", "migration tasks" -> setOf("--run", "--state", "--offset", "--limit")
+                "analysis prepare" -> setOf("--apk", "--rules", "--run", "--base-knowledge", "--corpus", "--reference-knowledge")
+                "analysis tasks" -> setOf("--run", "--state", "--offset", "--limit", "--service")
+                "migration tasks" -> setOf("--run", "--state", "--offset", "--limit")
                 "analysis inspect" -> setOf("--run", "--task")
                 "migration inspect" -> setOf("--run", "--task", "--candidate")
                 "analysis submit", "migration submit" -> setOf("--run", "--review")
@@ -64,7 +65,7 @@ fun runCli(args: Array<String>): Int = try {
             val options = linkedMapOf<String, MutableList<String>>()
             for (i in 2 until args.size step 2) {
                 requireInput(args[i] in allowed, "Unknown option: ${args[i]}")
-                requireInput(args[i] == "--candidate" || args[i] !in options, "Duplicate option: ${args[i]}")
+                requireInput(args[i] in setOf("--candidate", "--reference-knowledge", "--service") || args[i] !in options, "Duplicate option: ${args[i]}")
                 requireInput(args[i + 1].isNotBlank(), "Empty option: ${args[i]}")
                 options.getOrPut(args[i]) { mutableListOf() } += args[i + 1]
             }
@@ -87,13 +88,14 @@ fun runCli(args: Array<String>): Int = try {
                 "analysis targets" -> AnalysisService.targets(path("--corpus"), options["--run"]?.single()?.let(Path::of), options["--state"]?.single(), number("--offset", 0), number("--limit", 20))
                 "analysis research" -> ResearchService.research(path("--corpus"), value("--target").split(',').map(String::trim), path("--out"))
                 "analysis discover" -> AnalysisService.discover(path("--apk"), path("--profile"), path("--out"), options["--base-knowledge"]?.single()?.let(Path::of))
-                "analysis prepare" -> AnalysisService.prepare(path("--apk"), path("--rules"), path("--run"), options["--base-knowledge"]?.single()?.let(Path::of), options["--corpus"]?.single()?.let(Path::of)).let {
+                "analysis prepare" -> AnalysisService.prepare(path("--apk"), path("--rules"), path("--run"), options["--base-knowledge"]?.single()?.let(Path::of), options["--corpus"]?.single()?.let(Path::of),
+                    options["--reference-knowledge"].orEmpty().map(Path::of)).let {
                     mapOf("runId" to it.runId, "run" to path("--run").toAbsolutePath().toString(), "tasks" to it.tasks.size,
                         "resolutions" to it.tasks.mapNotNull { task -> task.resolution?.status }.groupingBy { status -> status }.eachCount(),
                         "waiting" to it.tasks.count { task -> task.waitingFor.isNotEmpty() },
                         "inherited" to it.tasks.count { task -> task.executionState == dev.dexlineage.analysis.AnalysisExecutionState.INHERITED }, "anchors" to it.anchorTasks.size)
                 }
-                "analysis tasks" -> AnalysisService.tasks(path("--run"), options["--state"]?.single(), number("--offset", 0), number("--limit", 20))
+                "analysis tasks" -> AnalysisService.tasks(path("--run"), options["--state"]?.single(), number("--offset", 0), number("--limit", 20), options["--service"].orEmpty().toSet())
                 "analysis inspect" -> AnalysisService.inspect(path("--run"), value("--task").split(',').toSet())
                 "analysis submit" -> AnalysisService.submit(path("--run"), path("--review"))
                 "analysis publish" -> AnalysisService.publish(path("--run"), path("--out"), options["--at"]?.single()?.let(Path::of))

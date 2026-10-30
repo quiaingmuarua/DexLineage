@@ -95,7 +95,7 @@ object MappingOutput {
         }
     }
 
-    internal fun verifyContents(mapping: Path, renames: List<AcceptedRename>) {
+    fun verifyContents(mapping: Path, renames: List<AcceptedRename>) {
         requireInput(MappingReader.detectFormat(mapping) == MappingFormat.TINY_2_FILE, "Expected Tiny v2 Mapping: $mapping")
         val tree = MemoryMappingTree()
         MappingReader.read(mapping, MappingFormat.TINY_2_FILE, tree)

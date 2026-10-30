@@ -69,4 +69,26 @@ class StrategyRegistryTest {
                 EntityKind.CLASS, mapOf("nameMethod" to "root"))))
         }
     }
+
+    @Test fun `grpc selectors are finite exact role records with no expected identities`() {
+        val dependency = mapOf("nameFactory" to "grpc.name")
+        val valid = rule("grpc-java.rpc-message", """{"selectors":[{"service":"fixture.Service","rpc":"Read","role":"request"},{"service":"fixture.Service","rpc":"Write","role":"response"}]}""",
+            EntityKind.CLASS, dependency)
+        StrategyRegistry.validate(valid)
+        for (parameters in listOf("{}", """{"selectors":[]}""", """{"selectors":[{"service":"fixture.Service","rpc":"Read","role":"anything"}]}""",
+            """{"selectors":[{"service":"fixture.Service","rpc":"Read","role":"request","owner":"Lexpected;"}]}""",
+            """{"selectors":[{"service":"fixture.Service","rpc":"Read","role":"request"},{"service":"fixture.Service","rpc":"Read","role":"request"}]}""")) {
+            assertFailsWith<ValidationException> { StrategyRegistry.validate(rule("grpc-java.rpc-message", parameters, EntityKind.CLASS, dependency)) }
+        }
+    }
+
+    @Test fun `grpc discovery requires mechanically verified name factory not an arbitrary method`() {
+        val consumer = rule("grpc-java.rpc-discovery", "{}", EntityKind.CLASS, mapOf("nameFactory" to "grpc.name"))
+        val wrong = rule("builtin.method-signature", """{"parameterTypes":["Ljava/lang/String;","Ljava/lang/String;"],"returnType":"Ljava/lang/String;"}""",
+            requires = mapOf("owner" to "descriptor"))
+        assertFailsWith<ValidationException> { StrategyRegistry.validateDependencyDefinitions(consumer, mapOf("grpc.name" to wrong)) }
+        val producer = rule("grpc-java.full-method-name", "{}", requires = mapOf("descriptor" to "descriptor"))
+        StrategyRegistry.validateDependencyDefinitions(consumer, mapOf("grpc.name" to producer))
+        assertEquals(mapOf("descriptor" to EntityKind.CLASS), StrategyRegistry.dependencyKinds(producer))
+    }
 }

@@ -13,7 +13,7 @@ internal object RpcRecipe {
         val requestDeclarationType: String, val responseDeclarationType: String,
         val requestImplementationType: String, val responseImplementationType: String,
         val related: Set<String>, val offset: Int)
-    private data class Inspection(val bindings: List<Binding>, val unknown: Boolean, val detail: String)
+    internal data class Inspection(val bindings: List<Binding>, val unknown: Boolean, val detail: String)
     private data class Marshaller(val messageType: String, val implementationType: String, val related: Set<String>)
     internal data class RelatedType(val type: String, val status: MatchStatus, val binding: Binding, val detail: String)
 
@@ -111,14 +111,26 @@ internal object RpcRecipe {
         if (!trace.complete) return Inspection(emptyList(), true, trace.reason ?: "Unreadable descriptor construction")
         val nameCalls = trace.calls.filter { call -> call.args == listOf(Value.Text(service), Value.Text(rpc)) && call.method.result == "Ljava/lang/String;" }
         if (nameCalls.isEmpty()) return Inspection(emptyList(), false, "No bound service/RPC invocation")
+        val inspected = nameCalls.map { inspectCall(s, rule, method, it) }
+        return Inspection(inspected.flatMap { it.bindings }.distinct(), inspected.any { it.unknown },
+            "Descriptor role, constructor transfer or marshaller default instance is outside supported local shapes")
+    }
+
+    /** Shared construction reader for known RPC rules and dependency-driven full-APK discovery. */
+    internal fun inspectCall(s: DexFactSession, rule: RuleRevision, method: Method, name: CallEvent,
+                             descriptorType: String? = null): Inspection {
+        val trace = s.trace(method)
+        if (!trace.complete) return Inspection(emptyList(), true, trace.reason ?: "Unreadable descriptor construction")
         val bindings = mutableListOf<Binding>(); var unknown = false
-        for (name in nameCalls) {
+        run {
+
             val value = Value.Invocation(name.offset, name.method, name.receiver, name.args)
             val nameWrites = trace.writes.filter { it.value == value && it.receiver != null }
             if (nameWrites.isEmpty()) unknown = true
             for (nameWrite in nameWrites) {
                 val builder = nameWrite.receiver!!
-                val builds = trace.calls.filter { it.offset > nameWrite.offset && it.receiver == builder && it.method.args.isEmpty() && it.method.result in s.classes }
+                val builds = trace.calls.filter { it.offset > nameWrite.offset && it.receiver == builder && it.method.args.isEmpty() &&
+                    it.method.result in s.classes && (descriptorType == null || it.method.result == descriptorType) }
                 if (builds.isEmpty()) unknown = true
                 for (build in builds) {
                     val builderMethod = s.method(build.method)
