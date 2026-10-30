@@ -39,13 +39,13 @@ Alternative locators are OR alternatives for one semantic target: all execute, t
 
 | Candidate result | Resolution | Publication eligibility |
 |---|---|---|
-| One entity has PASS and no other possible entity exists | `UNIQUE` | Class target may enter semantic review; support anchor may be published |
+| One entity has PASS, no other possible entity exists and no relevant unresolved path remains | `UNIQUE` | Class target may enter semantic review; support anchor may be published |
 | Two or more entities have PASS | `AMBIGUOUS` | Invalid |
-| One PASS entity plus a different UNKNOWN entity, or only unknown entities | `UNKNOWN` | Invalid |
-| No non-failing entity | `NO_MATCH` | Invalid |
+| Fewer than two PASS entities, with a different UNKNOWN entity or a relevant unresolved path | `UNKNOWN` | Invalid |
+| No non-failing entity and no relevant unresolved path | `NO_MATCH` | Invalid |
 | Scan/execution incomplete | Execution error | No successful matching result |
 
-Several fields/locators supporting one class still identify one entity. A PASS and UNKNOWN relation for the same entity can remain UNIQUE; its unknown diagnostics are retained. Renaming one task, rejecting another, reviewing only part of the queue or changing submission order cannot change these results.
+Several fields/locators supporting one class still identify one entity. A PASS and UNKNOWN relation for the same entity can remain UNIQUE when no relevant unresolved path remains; its unknown diagnostics are retained. Renaming one task, rejecting another, reviewing only part of the queue or changing submission order cannot change these results.
 
 METHOD results use the full owner plus original method name and descriptor. Two methods in the same class remain two entities. `Resolution.uniqueRef` only returns CLASS results; `uniqueEntity` covers both supported result kinds. An anchor has no Rename alias and cannot become a Mapping row merely because it is unique.
 
