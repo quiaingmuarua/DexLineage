@@ -22,6 +22,7 @@ class FixtureIntegrationTest {
     private lateinit var repo: Path
     private lateinit var oracles: Map<String, R8Oracle>
     private val results = linkedMapOf<String, Any>()
+    private val runVersions = mutableMapOf<Path, String>()
 
     @Test
     fun `R8 APKs exercise the installed CLI from discovery through durable knowledge and mapping readback`() {
@@ -32,6 +33,7 @@ class FixtureIntegrationTest {
         cli = FixtureCli(requiredPath("dexlineage.distributionDir"), output, repo)
         manifest = FixtureManifest.read(casePath)
         FixturePreflight.verify(fixtureRoot, casePath, output.resolve("preflight"))
+        FixturePerturbations.verify(fixtureRoot, casePath, output.resolve("perturbations"))
         oracles = manifest.versions.mapValues { (_, v) -> R8Oracle(repo.resolve(v.mapping)) }
 
         // Execute every declared regression in both real APKs, including cases discovery cannot draft.
@@ -159,6 +161,8 @@ class FixtureIntegrationTest {
         results["finalConfirmed"] = finalKnowledge.entries.size
         results["finalUnresolved"] = finalKnowledge.unresolved.size
         results["commands"] = cli.commandCount
+        results["commandTimings"] = cli.timingSummary
+        results["publishedDexReports"] = "dex-consumption"
         results["reviewMeaning"] = "Source-authored fixture truth, not an Agent judgement evaluation"
         cli.write("summary.json", results)
     }
@@ -183,12 +187,16 @@ class FixtureIntegrationTest {
 
     private fun verifyAnalysisHistory(dir: Path, run: AnalysisRun, reviews: List<AnalysisReview>, submitted: AnalysisSubmitResult, firstOut: Path) {
         val changed = reviews.first().copy(action = ReviewAction.DEFER, rationale = "Fixture revision deliberately defers the previously accepted proposal.")
+        val first = cli.read<VersionKnowledge>(firstOut.resolve("knowledge.json"))
+        val changedTarget = assertNotNull(run.tasks.single { it.taskId == changed.taskId }.resolution!!.uniqueRef)
+        val changedEntry = first.entries.single { it.binding == changedTarget }
+        val expectedLaterEntries = first.entries.filterNot { it.semanticId == changedEntry.semanticId }
         rejectAnalysis(dir, run, listOf(changed), "requires-explicit-supersedes")
         val replacement = changed.copy(supersedes = submitted.revisions.getValue(changed.taskId))
         val file = cli.write("reviews/source-revision.json", analysisBatch(run, listOf(replacement)))
         cli.execute("source-revision", "analysis", "submit", "--run", dir, "--review", file)
         val later = publish("analysis", dir, cli.output.resolve("source-later"))
-        assertEquals(reviews.size - 1, later.entries.size)
+        assertEquals(expectedLaterEntries, later.entries, "Only the explicitly deferred source entity must leave the published snapshot")
         val page = analysisPage(dir)
         assertEquals(run.tasks.size, page.total)
         assertEquals(TaskState.DEFERRED, page.items.single { it.task.taskId == changed.taskId }.state)
@@ -289,6 +297,7 @@ class FixtureIntegrationTest {
         val args = mutableListOf<Any>("analysis", "prepare", "--apk", apk(version), "--rules", rules, "--run", dir)
         base?.let { args.add("--base-knowledge"); args.add(it) }
         cli.execute("${dir.fileName}-prepare", *args.toTypedArray())
+        runVersions[dir] = version
         return cli.read(dir.resolve("run.json"))
     }
 
@@ -297,7 +306,24 @@ class FixtureIntegrationTest {
             "--source-apk", apk("v1"), "--target-apk", apk("v2"), "--run", dir)
         overrides?.let { args.add("--rules"); args.add(it) }
         cli.execute("${dir.fileName}-prepare", *args.toTypedArray())
-        return cli.read(dir.resolve("run.json"))
+        runVersions[dir] = "v2"
+        val run = cli.read<MigrationRun>(dir.resolve("run.json"))
+        val replaced = overrides?.let { cli.read<MigrationRulesFile>(it).items.map { item -> item.semanticId }.toSet() }.orEmpty()
+        run.tasks.forEach { task ->
+            if (task.taskId !in replaced) assertEquals(task.entry.ruleRevision, task.rule, "Unmodified migration carries the exact effective rule")
+            val proof = assertNotNull(task.resolution)
+            assertEquals(RawDex.read(apk("v2")).apkSha256, proof.apkSha256)
+            assertNotEquals(task.entry.resolution!!.resolutionId, proof.resolutionId, "Target matching is a fresh execution proof")
+            assertNotEquals(task.entry.binding.apkSha256, proof.apkSha256)
+        }
+        cli.write("proof-handoff/${dir.fileName}.json", mapOf("schemaVersion" to 1, "runId" to run.runId,
+            "sourceKnowledgeId" to run.knowledge.knowledgeId, "sourceApkSha256" to run.sourceApk.sha256,
+            "targetApkSha256" to run.targetApk.sha256, "tasks" to run.tasks.map { task -> mapOf(
+                "semanticId" to task.taskId, "explicitOverride" to (task.taskId in replaced),
+                "sourceRuleRevisionId" to task.entry.ruleRevision!!.revisionId, "effectiveRuleRevisionId" to task.rule.revisionId,
+                "sourceResolutionId" to task.entry.resolution!!.resolutionId, "targetResolutionId" to task.resolution!!.resolutionId,
+                "freshTargetProofAsserted" to true, "unchangedRuleAsserted" to (task.taskId !in replaced)) }, "status" to "PASS"))
+        return run
     }
 
     private fun inspectAnalysis(dir: Path, run: AnalysisRun): List<EvidenceRecord> =
@@ -353,11 +379,30 @@ class FixtureIntegrationTest {
     private fun analysisPage(dir: Path): AnalysisTaskPage = cli.result("${dir.fileName}-tasks", "analysis", "tasks", "--run", dir, "--state", "ALL", "--limit", 100)
     private fun publish(scene: String, run: Path, out: Path): VersionKnowledge {
         cli.execute("${out.fileName}", scene, "publish", "--run", run, "--out", out)
+        verifyPublished(out, runVersions.getValue(run))
         return cli.read(out.resolve("knowledge.json"))
     }
     private fun replay(scene: String, run: Path, first: Path, replay: Path) {
         cli.execute("${replay.fileName}", scene, "publish", "--run", run, "--out", replay, "--at", first.resolve("report.json"))
         for (file in listOf("knowledge.json", "mapping.tiny")) assertEquals(Files.readString(first.resolve(file)), Files.readString(replay.resolve(file)), "Replay $file")
+        verifyPublished(replay, runVersions.getValue(run))
+    }
+
+    private fun verifyPublished(out: Path, version: String): PublishedDexFacts {
+        val publishable = manifest.cases.filter { it.versions.getValue("v1").resolution == "UNIQUE" }
+        val authored = publishable
+            .associate { it.semanticAlias to it.versions.getValue("v1").owners.single() } +
+            ("RefinedPrivateCache" to scenario("privateCache").versions.getValue("v1").owners.single())
+        val members = publishable.associate { scenario ->
+            val sourceOwner = scenario.versions.getValue("v1").owners.single()
+            val expected = scenario.versions.getValue(version).classes.single { it.className == sourceOwner }
+            scenario.semanticAlias to ExpectedPublishedMembers(fields = expected.loggerFields.map {
+                ExpectedPublishedField(it.name, "L${manifest.loggerClass.replace('.', '/')};", it.flags)
+            })
+        }.toMutableMap()
+        members["RefinedPrivateCache"] = members.getValue(scenario("privateCache").semanticAlias)
+        return PublishedFixtureAssertions.verify(cli, apk(version), out.resolve("knowledge.json"), oracles.getValue(version), authored,
+            membersByName = members)
     }
 
     private fun assertResolution(resolution: Resolution, scenario: FixtureCase, version: String) {

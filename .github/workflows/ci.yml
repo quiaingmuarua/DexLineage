@@ -62,7 +62,7 @@ jobs:
         run: |
           test -n "$ANDROID_HOME"
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Build R8 fixtures and run CLI integration regressions
+      - name: Build R8 fixtures and verify published knowledge against DEX
         shell: bash
         run: ./gradlew --no-daemon fixtureIntegrationTest
       - name: Upload public fixture diagnostics

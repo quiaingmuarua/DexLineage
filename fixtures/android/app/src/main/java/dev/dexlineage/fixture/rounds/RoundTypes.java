@@ -6,10 +6,6 @@ interface HandlerContract {
     String requestId();
 }
 interface SpecializedHandler extends HandlerContract {}
-final class NamedHandler implements SpecializedHandler {
-    public String componentName() { return "RoundHandler"; }
-    public String requestId() { return "round-request"; }
-}
 final class DuplicateHandlerOne implements HandlerContract {
     public String componentName() { return "DuplicateHandler"; }
     public String requestId() { return "first-request"; }

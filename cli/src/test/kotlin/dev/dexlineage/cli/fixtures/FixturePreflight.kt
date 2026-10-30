@@ -1,24 +1,12 @@
 package dev.dexlineage.cli.fixtures
 
 import com.google.gson.GsonBuilder
-import jadx.api.plugins.input.data.attributes.types.SourceFileAttr
-import jadx.api.plugins.input.insns.InsnIndexType
 import jadx.api.plugins.input.insns.Opcode
-import jadx.plugins.input.dex.DexInputPlugin
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.zip.ZipFile
 
 /** Checks the compiled test specimen without using production facts, rules, or scenario services. */
 object FixturePreflight {
-    private data class Field(val name: String, val type: String, val flags: Int)
-    private data class Ref(val owner: String, val name: String, val args: List<String>, val result: String)
-    private data class Insn(val opcode: Opcode, val offset: Int, val regs: List<Int>,
-        val literal: String?, val method: Ref?, val fieldOwner: String?, val fieldName: String?)
-    private data class Method(val ref: Ref, val flags: Int, val instructions: List<Insn>)
-    private data class Class(val descriptor: String, val sourceFiles: List<String>,
-        val fields: List<Field>, val methods: List<Method>)
-
     fun verify(fixtureRoot: Path, casesPath: Path, outputDir: Path) {
         Files.createDirectories(outputDir)
         val checks = mutableListOf<Map<String, Any>>()
@@ -39,7 +27,7 @@ object FixturePreflight {
                 val directives = Files.readString(configuration).lineSequence().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }.toList()
                 check("-dontshrink" in directives && "-dontoptimize" in directives) { "Fixture must preserve code and disable optimization" }
                 check(directives.none { it == "-dontobfuscate" }) { "Fixture unexpectedly disables renaming" }
-                val raw = readDex(apk)
+                val raw = RawDex.read(apk).classes
                 check(raw.values.all { cls -> cls.sourceFiles.all { it in setOf("fixture", "SourceFile") } }) {
                     "Original SourceFile information survived in fixture or support classes"
                 }
@@ -129,35 +117,4 @@ object FixturePreflight {
         Files.writeString(dir.resolve("preflight.json"), GsonBuilder().setPrettyPrinting().create().toJson(report))
     }
 
-    private fun readDex(apk: Path): Map<String, Class> = ZipFile(apk.toFile()).use { zip ->
-        val entries = zip.entries().asSequence().toList()
-        check(entries.any { it.name == "AndroidManifest.xml" }) { "Not an APK: missing AndroidManifest.xml" }
-        check(entries.none { it.name.endsWith(".java") || it.name.endsWith(".kt") || it.name.endsWith("mapping.txt") || it.name.endsWith("cases.json") }) { "APK contains oracle or original source materials" }
-        val dexEntries = entries.filter { Regex("classes(?:[0-9]+)?\\.dex").matches(it.name) }
-        check(dexEntries.isNotEmpty()) { "Fixture APK contains no DEX" }
-        val classes = linkedMapOf<String, Class>()
-        for (entry in dexEntries) {
-            DexInputPlugin().loadDex(zip.getInputStream(entry).use { it.readAllBytes() }, entry.name).use { loader ->
-                loader.visitClasses { cls ->
-                    val fields = mutableListOf<Field>()
-                    val methods = mutableListOf<Method>()
-                    cls.visitFieldsAndMethods({ fields += Field(it.name, it.type, it.accessFlags) }, { method ->
-                        val ref = method.methodRef.also { it.load() }
-                        val insns = mutableListOf<Insn>()
-                        method.codeReader?.visitInstructions { insn ->
-                            insn.decode()
-                            val call = if (insn.indexType == InsnIndexType.METHOD_REF) insn.indexAsMethod.also { it.load() } else null
-                            val field = if (insn.indexType == InsnIndexType.FIELD_REF) insn.indexAsField else null
-                            insns += Insn(insn.opcode, insn.offset, (0 until insn.regsCount).map { insn.getReg(it) },
-                                if (insn.opcode == Opcode.CONST_STRING) insn.indexAsString else null,
-                                call?.let { Ref(it.parentClassType, it.name, it.argTypes.toList(), it.returnType) }, field?.parentClassType, field?.name)
-                        }
-                        methods += Method(Ref(ref.parentClassType, ref.name, ref.argTypes.toList(), ref.returnType), method.accessFlags, insns)
-                    })
-                    check(classes.put(cls.type, Class(cls.type, cls.attributes.filterIsInstance<SourceFileAttr>().map { it.fileName }, fields, methods)) == null) { "Duplicate fixture class ${cls.type}" }
-                }
-            }
-        }
-        classes
-    }
 }
