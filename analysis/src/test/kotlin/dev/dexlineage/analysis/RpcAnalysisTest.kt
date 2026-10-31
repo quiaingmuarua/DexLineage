@@ -1,9 +1,13 @@
 package dev.dexlineage.analysis
 
+import dev.dexlineage.analysis.messages.*
+
 import dev.dexlineage.io.*
 import dev.dexlineage.knowledge.*
 import dev.dexlineage.mapping.MappingOutput
 import dev.dexlineage.model.*
+import dev.dexlineage.messages.RpcCallObservation
+import com.google.gson.JsonObject
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -12,6 +16,7 @@ import kotlin.test.*
 
 class RpcAnalysisTest {
     @TempDir lateinit var temp: Path
+    private fun method(options: RpcDraftOptions) = AnalysisMethodSpec("messages.grpc", JsonFiles.gson.toJsonTree(options).asJsonObject)
     private val inventory = mapOf("La;" to "classes.dex", "Lb;" to "classes.dex", "Lcaller;" to "classes.dex")
     private fun apk(name: String = "fixture") = Digests.artifact(temp.resolve("$name.apk").also {
         if (!Files.exists(it)) Files.writeString(it, "identity-only protocol fixture $name")
@@ -66,7 +71,7 @@ class RpcAnalysisTest {
     @Test fun `RPC drafts group by Proto and retain every role and unknown fact regardless of review scope`() {
         val apk = apk()
         val profile = AnalysisProfile(id = "rpc", strategy = StrategySpec("grpc-java.rpc-discovery", requires = mapOf("nameFactory" to "factory")),
-            rpcDrafts = RpcDraftOptions(reviewServices = listOf("fixture.Group")))
+            method = method(RpcDraftOptions(reviewServices = listOf("fixture.Group"))))
         fun relation(service: String, rpc: String, role: String, status: MatchStatus = MatchStatus.PASS) = MatchFact(ref(apk, "La;"), status,
             listOf(FactorResult("rpc", status, "same construction")), mapOf("service" to service, "rpc" to rpc, "role" to role), relatedRefs = listOf(ref(apk, "Lcaller;")))
         val facts = listOf(relation("fixture.Group", "Read", "request"), relation("fixture.Group", "Read", "response"),
@@ -153,19 +158,25 @@ class RpcAnalysisTest {
     @Test fun `configuration name calls remain visible but do not become RPC role rows`() {
         val apk = apk()
         val profile = AnalysisProfile(id = "rpc", strategy = StrategySpec("grpc-java.rpc-discovery", requires = mapOf("nameFactory" to "factory")),
-            rpcDrafts = RpcDraftOptions())
+            method = method(RpcDraftOptions()))
         val caller = MethodRef(ref(apk, "Lcaller;"), "run", "()V")
         val calls = listOf(RpcCallObservation(caller, 1, "fixture.Service", "ConfigurationOnly", "NON_CONSTRUCTION"),
             RpcCallObservation(caller, 2, "fixture.Service", "Read", "RESOLVED", listOf(ref(apk, "La;")), listOf(ref(apk, "Lb;"))))
         val discovery = AnalysisDiscovery(discoveryId = "fixture", engineBuildId = "test-build", apk = apk, profileSource = apk,
             profile = profile, classInventory = inventory, leads = emptyList(), matches = emptyList(), scan = ScanStats(3, 1, 3, 2, 0, emptyList()),
-            matchCounts = emptyMap(), conditionCounts = emptyMap(), analysisDiagnostics = emptyList(), analysisMillis = 0, createdAt = "fixture", rpcCalls = calls)
+            matchCounts = emptyMap(), conditionCounts = emptyMap(), analysisDiagnostics = emptyList(), analysisMillis = 0, createdAt = "fixture", compatibility = JsonObject().apply { add("rpcCalls", JsonFiles.gson.toJsonTree(calls)) })
         val json = JsonFiles.gson.toJsonTree(RpcAnalysis.catalog(discovery)).asJsonObject
         assertEquals(2, json.getAsJsonArray("calls").size())
         assertEquals(2, json.getAsJsonArray("roles").size())
         assertTrue(json.getAsJsonArray("roles").all { it.asJsonObject.get("rpc").asString == "Read" })
         assertEquals(2, json.getAsJsonObject("counts").get("capturedServiceRpcPairs").asInt)
         assertEquals(1, json.getAsJsonObject("counts").get("serviceRpcPairs").asInt)
+        val method = AnalysisMethods.forProfile(profile)
+        assertFailsWith<ValidationException> { method.validateDiscoveryArtifacts(discovery, temp) }
+        val written = method.discoveryArtifacts(discovery, temp)
+        assertEquals(written, method.validateDiscoveryArtifacts(discovery, temp))
+        Files.writeString(temp.resolve("rpc-catalog.json"), "{}")
+        assertFailsWith<ValidationException> { method.validateDiscoveryArtifacts(discovery, temp) }
     }
 
     @Test fun `saved reference report and mapping cannot change after preparation`() {
@@ -190,11 +201,11 @@ class RpcAnalysisTest {
 
     @Test fun `RPC profile options do not accept silent name templates or scope filters`() {
         val profile = AnalysisProfile(id = "rpc", strategy = StrategySpec("grpc-java.rpc-discovery", requires = mapOf("nameFactory" to "factory")),
-            rpcDrafts = RpcDraftOptions(listOf("fixture.Group")))
+            method = method(RpcDraftOptions(listOf("fixture.Group"))))
         val path = temp.resolve("profile.json"); JsonFiles.writeNew(path, profile)
         assertEquals(profile, AnalysisService.readProfile(path))
         assertFailsWith<ValidationException> { RpcAnalysis.validate(profile.copy(nameCapture = "rpc")) }
-        assertFailsWith<ValidationException> { RpcAnalysis.validate(profile.copy(rpcDrafts = RpcDraftOptions(listOf("fixture.Group", "fixture.Group")))) }
+        assertFailsWith<ValidationException> { RpcAnalysis.validate(profile.copy(method = method(RpcDraftOptions(listOf("fixture.Group", "fixture.Group"))))) }
     }
 
     @Test fun `legacy schema four run fingerprint is unchanged when new fields are absent`() {

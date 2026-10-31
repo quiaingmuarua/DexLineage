@@ -48,7 +48,7 @@ object ResolutionEngine {
         custom.forEach { rule ->
             val result = results.getValue(rule.revisionId)
             resolutions[rule.revisionId] = RuleProofs.create(artifact.sha256, rule, engineBuildId, result.matches,
-                dependencies.getValue(rule.revisionId), result.unresolvedPaths).also(RuleProofs::validate)
+                dependencies.getValue(rule.revisionId), result.unresolvedPaths.map { it.toWire() }).also(RuleProofs::validate)
         }
         val already = builtinQuery.analysis?.code.orEmpty()
         val evidenceOwners = custom.filterNot(StrategyRegistry::deferredEvidence).flatMap { results.getValue(it.revisionId).matches }
@@ -57,9 +57,8 @@ object ResolutionEngine {
         val analysis = FieldAnalysis(builtinQuery.analysis?.bindings.orEmpty(), (already + extra).distinctBy { it.descriptor },
             builtinQuery.analysis?.diagnostics.orEmpty(), (builtinQuery.analysis?.elapsedMillis ?: 0) + extra.sumOf { it.elapsedMillis }, builtinQuery.analysis?.unavailableOwners.orEmpty())
         Digests.verify(artifact)
-        val rpcCalls = results.values.flatMap { it.rpcCalls.orEmpty() }.distinct().sortedWith(compareBy(
-            { EntityRef(it.source.owner, it.source).identity }, { it.codeUnitOffset }))
-        return ResolutionBatch(resolutions.toSortedMap(), builtinQuery.scan, analysis, waiting, rpcCalls.takeIf { it.isNotEmpty() })
+        val artifacts = MatchingArtifacts.write(workDir, results.values.flatMap { it.artifacts })
+        return ResolutionBatch(resolutions.toSortedMap(), builtinQuery.scan, analysis, waiting, artifacts)
     }
 
     internal fun normalizedRules(rules: List<RuleRevision>): List<RuleRevision> {

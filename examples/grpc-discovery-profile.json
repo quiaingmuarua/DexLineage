@@ -7,9 +7,12 @@
     "resultKind": "CLASS",
     "requires": {"nameFactory": "grpc.full-name"}
   },
-  "rpcDrafts": {
-    "reviewServices": ["example.Service"],
-    "requestSuffix": "Request",
-    "responseSuffix": "Response"
+  "method": {
+    "methodId": "messages.grpc",
+    "parameters": {
+      "reviewServices": ["example.Service"],
+      "requestSuffix": "Request",
+      "responseSuffix": "Response"
+    }
   }
 }

@@ -1,4 +1,4 @@
-package dev.dexlineage.rules.recipes
+package dev.dexlineage.messages
 
 import dev.dexlineage.model.*
 import dev.dexlineage.rules.*
@@ -8,21 +8,11 @@ import dev.dexlineage.rules.facts.DexFactSession.*
 /** Application recipes express observed conventions using current-APK facts and configured literals. */
 internal object MessagesRecipes {
     fun execute(s: DexFactSession, rule: RuleRevision, dependencies: Map<String, SupportAnchor>): List<MatchFact> = when (rule.strategyId) {
-        "builtin.method-signature" -> methodSignature(s, rule, dependencies.getValue("owner"))
         "messages.logger-fields" -> loggerFields(s, rule, dependencies.getValue("factory"))
         "messages.handler-name-method" -> handlerNameMethod(s, rule, dependencies.getValue("lifecycle"))
         "messages.named-handler" -> namedHandlers(s, rule, dependencies.getValue("nameMethod"))
         "messages.rpc-descriptor", "messages.rpc-message", "messages.rpc-related-type" -> RpcRecipe.execute(s, rule, dependencies)
         else -> error("Unregistered execution strategy ${rule.strategyId}")
-    }
-
-    private fun methodSignature(s: DexFactSession, rule: RuleRevision, anchor: SupportAnchor): List<MatchFact> {
-        val p = rule.parameters; val owner = anchor.binding.owner
-        return s.methods(owner.descriptor).filter { method ->
-            method.id.args == p.array("parameterTypes") && (p.string("returnType") == null || method.id.result == p.string("returnType")) &&
-                (p.get("returnSameAsOwner")?.asBoolean != true || method.id.result == owner.descriptor) &&
-                p.array("requiredFlags").orEmpty().all { method.flags and StrategyRegistry.flags.getValue(it) != 0 }
-        }.map { method -> fact(s, method.id.owner, MatchStatus.PASS, "method-signature", "Exact original method signature and access flags", method = method.id) }
     }
 
     private fun loggerFields(s: DexFactSession, rule: RuleRevision, anchor: SupportAnchor): List<MatchFact> {
@@ -33,7 +23,7 @@ internal object MessagesRecipes {
         val required = p.array("requiredFlags") ?: listOf("STATIC", "FINAL")
         val result = mutableListOf<MatchFact>()
         for (owner in scope.sorted()) {
-            val fields = s.fields(owner).filter { it.type == factory.id.result && required.all { flag -> it.flags and StrategyRegistry.flags.getValue(flag) != 0 } }
+            val fields = s.fields(owner).filter { it.type == factory.id.result && required.all { flag -> it.flags and HandlerInputs.flags.getValue(flag) != 0 } }
             if (fields.isEmpty()) continue
             val initializers = s.methods(owner).filter { it.id.name in setOf("<clinit>", "<init>") }
             for (field in fields) {
@@ -113,15 +103,8 @@ internal object MessagesRecipes {
         }
     }
 
-    internal fun methodInvocations(method: Method): Set<MethodId> {
-        val result = linkedSetOf<MethodId>()
-        method.code?.visitInstructions { i ->
-            if (i.opcode.name.startsWith("INVOKE_")) { i.decode(); if (i.indexType == jadx.api.plugins.input.insns.InsnIndexType.METHOD_REF) {
-                val r = i.indexAsMethod.also { it.load() }; result += MethodId(r.parentClassType, r.name, r.argTypes.toList(), r.returnType)
-            } }
-        }
-        return result
-    }
+    internal fun methodInvocations(method: Method): Set<MethodId> = MethodCodeFacts.invocations(method)
+
     internal fun fact(s: DexFactSession, owner: String, status: MatchStatus, kind: String, detail: String,
         captures: Map<String, String> = emptyMap(), method: MethodId? = null, related: List<String> = emptyList(),
         source: MethodId? = null, offset: Int? = null): MatchFact = MatchFact(s.ref(owner), status, listOf(FactorResult(kind, status, detail)), captures,

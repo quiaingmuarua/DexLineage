@@ -51,7 +51,6 @@ object RuleProofs {
             requireInput(path.source.owner.apkSha256 == apkSha256, "Unresolved path belongs to another APK")
             requireInput(path.codeUnitOffset == null || path.codeUnitOffset >= 0, "Invalid unresolved path offset")
             requireInput(path.reason.isNotBlank(), "Unresolved path needs a reason")
-            requireInput(path.role == null || path.role in setOf("request", "response"), "Invalid unresolved RPC role")
         }
         val sorted = matches.sortedWith(compareBy({ it.locatorIndex }, { EntityRef(it.owner, it.method).identity },
             { it.field?.fieldName.orEmpty() }, { it.field?.fieldType.orEmpty() }, { JsonFiles.encode(it) }))

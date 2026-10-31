@@ -2,8 +2,8 @@ package dev.dexlineage.rules.recipes
 
 import dev.dexlineage.rules.facts.*
 import dev.dexlineage.rules.facts.DexFactSession.*
-import dev.dexlineage.rules.recipes.GrpcDiagnosticGuard.Instruction
-import jadx.api.plugins.input.insns.Opcode
+import dev.dexlineage.messages.GrpcDiagnosticGuard
+import dev.dexlineage.rules.facts.CodeInstruction as Instruction
 import org.junit.jupiter.api.Test
 import kotlin.test.*
 
@@ -20,10 +20,10 @@ class GrpcDiagnosticGuardTest {
         Value.Allocation(3, exception), listOf(Value.Invocation(11, formatter, null, formatCall.args)), emptyMap(), emptyMap(), emptyMap())
     private val guard = RawTrace(true, null, listOf(formatCall, constructor), emptyList(), emptyList(), emptyMap())
     private val instructions = listOf(
-        Instruction(Opcode.IF_EQZ, 0, 3, listOf(2)), Instruction(Opcode.RETURN_VOID, 2, 0, emptyList()),
-        Instruction(Opcode.NEW_INSTANCE, 3, 0, listOf(2), exception), Instruction(Opcode.NEW_ARRAY, 6, 0, listOf(0, 0), "[$objectType"),
-        Instruction(Opcode.INVOKE_STATIC, 11, 0, listOf(3, 0)), Instruction(Opcode.MOVE_RESULT, 14, 0, listOf(3)),
-        Instruction(Opcode.INVOKE_DIRECT, 15, 0, listOf(2, 3)), Instruction(Opcode.THROW, 18, 0, listOf(2)))
+        Instruction("IF_EQZ", 0, 3, listOf(2)), Instruction("RETURN_VOID", 2, 0, emptyList()),
+        Instruction("NEW_INSTANCE", 3, 0, listOf(2), exception), Instruction("NEW_ARRAY", 6, 0, listOf(0, 0), "[$objectType"),
+        Instruction("INVOKE_STATIC", 11, 0, listOf(3, 0)), Instruction("MOVE_RESULT", 14, 0, listOf(3)),
+        Instruction("INVOKE_DIRECT", 15, 0, listOf(2, 3)), Instruction("THROW", 18, 0, listOf(2)))
 
     @Test fun `a guard requires both terminal error shape and an inspected formatter`() {
         assertTrue(GrpcDiagnosticGuard.guardBody(guard, instructions, 2) { it == formatter })
@@ -31,7 +31,7 @@ class GrpcDiagnosticGuardTest {
         assertFalse(GrpcDiagnosticGuard.guardBody(guard, instructions, 3) { true })
         assertFalse(GrpcDiagnosticGuard.guardBody(guard.copy(writes = listOf(
             WriteEvent(9, Field("LsideEffect;", "value", objectType), null, Value.Parameter(2, objectType)))), instructions, 2) { true })
-        assertFalse(GrpcDiagnosticGuard.guardBody(guard, instructions + Instruction(Opcode.NEW_INSTANCE, 20, 0, listOf(1), "Ldescriptor;"), 2) { true })
+        assertFalse(GrpcDiagnosticGuard.guardBody(guard, instructions + Instruction("NEW_INSTANCE", 20, 0, listOf(1), "Ldescriptor;"), 2) { true })
         assertFalse(GrpcDiagnosticGuard.guardBody(guard.copy(calls = listOf(formatCall.copy(arrays = mapOf(array to mapOf(0 to Value.Unknown))), constructor)), instructions, 2) { true })
     }
 
@@ -41,11 +41,11 @@ class GrpcDiagnosticGuardTest {
         val call = CallEvent(8, render, instance, emptyList(), emptyMap(), emptyMap(), emptyMap())
         val pure = RawTrace(true, null, listOf(call), emptyList(), listOf(ReturnEvent(10,
             Value.Invocation(8, render, instance, emptyList()))), emptyMap())
-        val body = listOf(Instruction(Opcode.NEW_INSTANCE, 1, 0, listOf(0), builder))
+        val body = listOf(Instruction("NEW_INSTANCE", 1, 0, listOf(0), builder))
         assertTrue(GrpcDiagnosticGuard.formatterBody(pure, body))
         assertFalse(GrpcDiagnosticGuard.formatterBody(pure.copy(calls = pure.calls + call.copy(method = formatter)), body))
-        assertFalse(GrpcDiagnosticGuard.formatterBody(pure, body + Instruction(Opcode.NEW_INSTANCE, 2, 0, listOf(1), "Ldescriptor;")))
-        assertFalse(GrpcDiagnosticGuard.formatterBody(pure, body + Instruction(Opcode.SGET, 2, 0, listOf(1), fieldOwner = "Lapplication;")))
+        assertFalse(GrpcDiagnosticGuard.formatterBody(pure, body + Instruction("NEW_INSTANCE", 2, 0, listOf(1), "Ldescriptor;")))
+        assertFalse(GrpcDiagnosticGuard.formatterBody(pure, body + Instruction("SGET", 2, 0, listOf(1), fieldOwner = "Lapplication;")))
         assertFalse(GrpcDiagnosticGuard.formatterBody(pure.copy(complete = false), body))
     }
 }
