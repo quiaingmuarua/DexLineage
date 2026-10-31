@@ -29,6 +29,7 @@ internal class DexFactSession(val artifact: Artifact, anchors: Set<String>, want
     private val loaders = mutableListOf<ICodeLoader>()
     private val members = mutableMapOf<String, Pair<List<Field>, List<Method>>>()
     private val traces = mutableMapOf<String, RawTrace>()
+    private val callSlices = mutableMapOf<String, CallSliceResult>()
     private val implementations = mutableMapOf<String, List<Class>>()
     val callOwners = mutableMapOf<String, MutableSet<String>>()
     data class DirectCall(val source: MethodId, val target: MethodId, val offset: Int)
@@ -115,6 +116,7 @@ internal class DexFactSession(val artifact: Artifact, anchors: Set<String>, want
     fun method(ref: MethodRef): Method? = if (ref.owner.descriptor in classes)
         methods(ref.owner.descriptor).singleOrNull { it.id.name == ref.name && it.id.descriptor == ref.descriptor } else null
     fun trace(method: Method): RawTrace = traces.getOrPut(method.id.key) { RawTrace.read(method) }
+    fun slices(method: Method): CallSliceResult = callSlices.getOrPut(method.id.key) { CallSlices.read(method) }
     fun isSubtype(type: String, parent: String): Boolean {
         val seen = mutableSetOf<String>(); val queue = ArrayDeque<String>(); queue += type
         while (queue.isNotEmpty()) {

@@ -13,7 +13,7 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 
 private const val HELP = """DexLineage 0.4.0
-  analysis run       --method <messages.grpc|profile> --config <config.json> --work <new-directory>
+  analysis run       --method <messages.grpc|messages.proto-relations|profile> --config <config.json> --work <new-directory>
   analysis status    --work <directory>
   analysis resume    --work <directory>
   analysis import-jadx --apk <apk> --project <project.jadx> --out <new-directory>

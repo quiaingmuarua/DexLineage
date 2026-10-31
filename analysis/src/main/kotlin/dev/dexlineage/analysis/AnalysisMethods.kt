@@ -23,6 +23,7 @@ interface AnalysisMethod {
     fun validate(profile: AnalysisProfile)
     fun leads(apk: Artifact, profile: AnalysisProfile, facts: List<MatchFact>): List<DiscoveryLead>
     fun drafts(profile: AnalysisProfile, leads: List<DiscoveryLead>): List<AnalysisRuleItem>
+    fun corpusTargetIds(profile: AnalysisProfile): Set<String> = emptySet()
     fun validateArtifacts(artifacts: List<ScenarioArtifactRef>, compatibility: JsonObject?, apk: Artifact, inventory: Map<String, String>) {}
     fun discoveryArtifacts(discovery: AnalysisDiscovery, out: Path): List<ScenarioArtifactRef> = emptyList()
     fun validateDiscoveryArtifacts(discovery: AnalysisDiscovery, out: Path): List<ScenarioArtifactRef> = emptyList()
@@ -37,7 +38,7 @@ interface AnalysisMethod {
 }
 
 object AnalysisMethods {
-    private val methods: Map<String, AnalysisMethod> = register(listOf(ProfileAnalysisMethod, MessagesGrpcAnalysisMethod))
+    private val methods: Map<String, AnalysisMethod> = register(listOf(ProfileAnalysisMethod, MessagesGrpcAnalysisMethod, MessagesProtoAnalysisMethod))
     internal fun register(values: List<AnalysisMethod>): Map<String, AnalysisMethod> {
         requireInput(values.all { it.id.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]*")) }, "Invalid Analysis method ID")
         requireInput(values.map { it.id }.distinct().size == values.size, "Duplicate Analysis method ID")
@@ -51,7 +52,7 @@ object AnalysisMethods {
     fun prepareConfig(methodId: String, configPath: Path): AnalysisMethodPlan = checkedInput("Analysis method configuration") {
         val config = JsonParser.parseString(Files.readString(configPath)).asJsonObject
         requireInput(config.get("schemaVersion")?.asInt == SCHEMA_VERSION, "Expected schemaVersion $SCHEMA_VERSION")
-        requireInput(config.keySet().all { it in setOf("schemaVersion", "apk", "baseKnowledge", "referenceKnowledge", "profile", "seedRules") }, "Unknown Analysis method configuration field")
+        requireInput(config.keySet().all { it in setOf("schemaVersion", "apk", "baseKnowledge", "referenceKnowledge", "profile", "seedRules", "corpus") }, "Unknown Analysis method configuration field")
         val method = get(methodId)
         fun path(key: String): Path? = config.get(key)?.takeUnless { it.isJsonNull }?.asString?.let { configPath.toAbsolutePath().parent.resolve(it).normalize() }
         val profileFile = path("profile")?.let(Digests::artifact) ?: throw ValidationException("Analysis method requires profile")

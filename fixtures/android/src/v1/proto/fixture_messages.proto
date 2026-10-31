@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package dexlineage.fixture;
+option java_package = "dev.dexlineage.fixture.proto";
+option java_multiple_files = true;
+option java_outer_classname = "FixtureMessages";
+
+// Self-authored schemas; generated Java stays exclusively under build/.
+message CredentialMessage {
+  string token = 1;
+  int64 epoch = 2;
+}
+message MemberMessage {
+  string identity = 1;
+}
+message ParentMessage {
+  CredentialMessage credential = 1;
+  repeated MemberMessage members = 2;
+  CredentialMessage secondary_credential = 3;
+  int64 retired_counter = 7;
+  string fixture_parent_anchor = 100;
+}
+message MapParent {
+  map<string, MemberMessage> entries = 1;
+  string fixture_map_anchor = 100;
+}
+message OneofParent {
+  oneof payload {
+    CredentialMessage credential = 1;
+    MemberMessage member = 2;
+  }
+  string fixture_oneof_anchor = 100;
+}

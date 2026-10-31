@@ -132,5 +132,21 @@ class AnalysisRoundsTest {
         val task = AnalysisService.makeTask(apk, item, rule, proof, null, null, corpus)
         assertEquals("manual_owner_mismatch", task.invalidReason)
         assertEquals("Lother;", task.resolution!!.uniqueRef!!.descriptor, "Expected manual owner must not change executed candidates")
+
+        val correctProof = RuleProofs.create(apk.sha256, rule, "test-build", listOf(fact(ref(apk, "Ltarget;"))))
+        val correct = AnalysisService.makeTask(apk, item, rule, correctProof, null, null, corpus)
+        val rules = AnalysisRuleFile(items = listOf(item)); val rulesPath = temp.resolve("corpus-rules.json"); JsonFiles.writeNew(rulesPath, rules)
+        val dir = temp.resolve("corpus-run"); Files.createDirectory(dir)
+        var run = AnalysisRun(runId = "", engineBuildId = "test-build", apk = apk, rulesFile = Digests.artifact(rulesPath), rules = rules,
+            discoveryFile = null, discovery = null, baseFile = null, baseKnowledge = null, classInventory = inventory, tasks = listOf(correct),
+            scan = ScanStats(3, 1, 1, 0, 0, emptyList()), analysisDiagnostics = emptyList(), analysisMillis = 0, createdAt = "fixture",
+            corpusFile = Digests.artifact(corpusPath), corpus = corpus)
+        run = run.copy(runId = run.fingerprint()); JsonFiles.writeNew(dir.resolve("run.json"), run)
+        EvidenceFiles.publish(dir, run.runId, apk, listOf(ref(apk, "Ltarget;")), listOf(DecompiledClass("Ltarget;", "class target {}", null, false, emptyList(), 0)))
+        val packet = ReviewPackets.write(dir, setOf("target"), temp.resolve("packet"))
+        ReviewPackets.validate(temp.resolve("packet"), dir, setOf("target"))
+        val template = JsonFiles.read(Path.of(packet.templatePath), AnalysisReviewBatch::class.java)
+        assertEquals("ManualTarget", template.items.single().name)
+        assertFailsWith<ValidationException> { AnalysisService.submit(dir, Path.of(packet.templatePath)) }
     }
 }

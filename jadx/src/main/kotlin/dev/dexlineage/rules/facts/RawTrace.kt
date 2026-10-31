@@ -8,6 +8,7 @@ import dev.dexlineage.rules.facts.DexFactSession.*
 internal sealed interface Value {
     data object Unknown : Value
     data class Text(val value: String) : Value
+    data class ClassLiteral(val type: String) : Value
     data class Number(val value: Long) : Value
     data class Parameter(val index: Int, val type: String) : Value
     data class Allocation(val site: Int, val type: String) : Value
@@ -21,8 +22,9 @@ internal data class CallEvent(val offset: Int, val method: MethodId, val receive
     val fields: Map<Field, Value>, val arrays: Map<Value.Array, Map<Int, Value>>, val constructions: Map<Value, CallEvent>)
 internal data class WriteEvent(val offset: Int, val field: Field, val receiver: Value?, val value: Value)
 internal data class ReturnEvent(val offset: Int, val value: Value)
+internal data class ArrayEffect(val offset: Int, val array: Value.Array, val precedingCalls: Set<Int>, val reason: String)
 internal data class RawTrace(val complete: Boolean, val reason: String?, val calls: List<CallEvent>, val writes: List<WriteEvent>,
-    val returns: List<ReturnEvent>, val constructions: Map<Value, CallEvent>) {
+    val returns: List<ReturnEvent>, val constructions: Map<Value, CallEvent>, val arrayEffects: List<ArrayEffect> = emptyList()) {
     companion object {
         private data class Insn(val op: Opcode, val offset: Int, val regs: List<Int>, val resultReg: Int,
             val literal: Long, val target: Int, val text: String?, val type: String?, val method: MethodId?, val field: Field?)

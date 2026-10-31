@@ -12,7 +12,8 @@ import java.nio.file.Path
 data class ReviewPacketEvidence(val evidenceId: String, val ref: ClassRef, val javaFile: Artifact,
     val smaliFile: Artifact?, val incomplete: Boolean, val diagnostics: List<String>)
 data class ReviewPacketTask(val task: AnalysisTask, val state: TaskState, val reason: String,
-    val latestRevision: String?, val methodDetails: JsonObject, val requiredEvidenceIds: List<String>, val evidenceIds: List<String>)
+    val latestRevision: String?, val methodDetails: JsonObject, val requiredEvidenceIds: List<String>, val evidenceIds: List<String>,
+    val manualName: String? = null)
 data class ReviewPacket(val schemaVersion: Int = SCHEMA_VERSION, val kind: String = "analysis-review-packet",
     val runId: String, val apkSha256: String, val engineBuildId: String, val tasks: List<ReviewPacketTask>,
     val sharedEvidence: List<ReviewPacketEvidence>)
@@ -34,7 +35,7 @@ object ReviewPackets {
             ReviewPacketTask(task, view.state, view.reason, view.latestRevision,
                 AnalysisMethods.forRun(run).taskDetails(task),
                 AnalysisPolicy.requiredRefs(run, task).map { ref -> records.getValue(ref).evidenceId }.sorted(),
-                allowed.map { ref -> records.getValue(ref).evidenceId }.sorted())
+                allowed.map { ref -> records.getValue(ref).evidenceId }.sorted(), manualName(run, task))
         }
         val evidence = records.values.sortedBy { it.evidenceId }.map { record ->
             // Read validates identity and both code digests before copying any user-facing material.
@@ -78,6 +79,7 @@ object ReviewPackets {
             val required = AnalysisPolicy.requiredRefs(run, item.task).map { Identities.evidenceId(run.runId, it) }.sorted()
             requireInput(item.evidenceIds == allowed && item.requiredEvidenceIds == required && allowed.all { it in evidence }, "Review packet evidence associations changed")
             requireInput(item.methodDetails == AnalysisMethods.forRun(run).taskDetails(item.task), "Review packet method details changed")
+            item.manualName?.let { requireInput(it == manualName(run, item.task), "Review packet manual name differs from corpus") }
         }
         packet.sharedEvidence.forEach { entry ->
             val original = EvidenceFiles.read(runDir, run.runId, entry.evidenceId)
@@ -96,7 +98,7 @@ object ReviewPackets {
                     addProperty("taskId", item.task.taskId); addProperty("resolutionId", item.task.resolution!!.resolutionId)
                     addProperty("ruleRevisionId", item.task.rule.revisionId)
                     add("action", JsonNull.INSTANCE); add("level", JsonNull.INSTANCE)
-                    val name = item.task.existingEntry?.name ?: item.task.request.proposedName
+                    val name = item.task.existingEntry?.name ?: item.task.request.proposedName ?: item.manualName
                     if (name == null) add("name", JsonNull.INSTANCE) else addProperty("name", name)
                     addProperty("rationale", ""); add("unverified", JsonArray())
                     add("evidenceIds", JsonFiles.gson.toJsonTree(item.evidenceIds))
@@ -113,7 +115,7 @@ object ReviewPackets {
         packet.tasks.forEach { item ->
             appendLine(); appendLine("## ${item.task.taskId}")
             appendLine("- State: ${item.state} (${item.reason}); matching: ${item.task.resolution?.status ?: item.task.executionState}")
-            appendLine("- Name: ${item.task.existingEntry?.name ?: item.task.request.proposedName ?: "needs semantic naming"}")
+            appendLine("- Name: ${item.task.existingEntry?.name ?: item.task.request.proposedName ?: item.manualName ?: "needs semantic naming"}")
             appendLine("- Identity: ${item.task.resolution?.uniqueRef?.descriptor ?: "no unique class"}; semanticId: ${item.task.semanticId ?: "unassigned"}")
             if (item.methodDetails.size() > 0) appendLine("- Method details: `${item.methodDetails}`")
             if (item.task.identitySourceKnowledgeId != null) appendLine("- Canonical referenced name must be preserved; defer if disputed.")
@@ -123,5 +125,9 @@ object ReviewPackets {
                 appendLine("  - ${e.ref.descriptor}: [Java](${e.javaFile.path.replace('\\', '/')})${e.smaliFile?.let { "; [Smali](${it.path.replace('\\', '/')})" } ?: ""}${if (e.incomplete) " — partial decompilation; state limitations in Review" else ""}")
             }
         }
+    }
+
+    private fun manualName(run: AnalysisRun, task: AnalysisTask): String? = task.request.corpusTargetId?.let { id ->
+        run.corpus?.targets?.singleOrNull { it.targetId == id }?.manualName
     }
 }

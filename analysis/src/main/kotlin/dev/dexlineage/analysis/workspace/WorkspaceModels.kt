@@ -6,11 +6,11 @@ import dev.dexlineage.model.SCHEMA_VERSION
 
 data class WorkspaceConfig(val schemaVersion: Int = SCHEMA_VERSION, val apk: String,
     val baseKnowledge: String? = null, val referenceKnowledge: List<String> = emptyList(),
-    val profile: String, val seedRules: String? = null)
+    val profile: String, val seedRules: String? = null, val corpus: String? = null)
 
 data class WorkspaceInputs(val configFile: Artifact, val config: WorkspaceConfig, val apk: Artifact,
     val baseKnowledge: Artifact?, val referenceKnowledge: List<Artifact>, val method: AnalysisMethodPlan,
-    val inputFiles: List<Artifact>, val implementationId: String, val engineBuildId: String)
+    val inputFiles: List<Artifact>, val implementationId: String, val engineBuildId: String, val corpusFile: Artifact? = null)
 
 enum class WorkspaceState { RUNNING, WAITING_DEPENDENCY, WAITING_REVIEW, COMPLETE, FAILED }
 enum class WorkspaceStageKind { SEED, DISCOVERY, PREPARE, PACKET, REVIEW_HEADS, PUBLICATION }

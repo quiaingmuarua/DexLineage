@@ -50,6 +50,9 @@ object MigrationService {
             val executing = rules.filterKeys { it !in inheritedEntries }.values + anchorRules.filterKeys { it !in inheritedAnchors }.values
             val query = ResolutionEngine.execute(target, executing.toList(), runDir.resolve("work/target"), available)
             requireScan(query.scan)
+            val artifactSource = if (executing.isEmpty() && targetBaseFile != null && query.artifacts.isEmpty())
+                Path.of(targetBaseFile.path).parent.resolve("report.json").takeIf { Files.isRegularFile(it) }?.let(Digests::artifact) else null
+            val artifacts = artifactSource?.let { MigrationArtifacts.fromPackage(it, targetBase!!.knowledgeId) } ?: query.artifacts
             targetBase?.entries?.forEach { requireInput(query.scan.classes[it.binding.descriptor] == it.binding.dexEntry, "Target base class is absent from target APK") }
             val tasks = orderedEntries.map { entry ->
                 val rule = rules.getValue(entry.semanticId)
@@ -67,7 +70,8 @@ object MigrationService {
                 minConfidence = minConfidence, tasks = tasks, sourceInventory = sourceScan.classes.toSortedMap(), targetInventory = query.scan.classes.toSortedMap(),
                 sourceScan = sourceScan.stats, targetScan = query.scan.stats, analysisDiagnostics = query.analysis?.diagnostics.orEmpty(), analysisMillis = query.analysis?.elapsedMillis ?: 0,
                 createdAt = Instant.now().toString(), rulesFile = rulesFile, ruleOverrides = overrides.sortedBy { it.semanticId }, engineBuildId = ResolutionEngine.buildId(),
-                targetBaseFile = targetBaseFile, targetBase = targetBase, anchorTasks = anchorTasks, anchorOverrides = definitions.anchors.sortedBy { it.key })
+                targetBaseFile = targetBaseFile, targetBase = targetBase, anchorTasks = anchorTasks, anchorOverrides = definitions.anchors.sortedBy { it.key },
+                methodArtifacts = MigrationArtifacts.copy(artifacts, runDir).takeIf { it.isNotEmpty() }, methodArtifactSource = artifactSource)
             run = run.copy(runId = run.fingerprint())
             query.analysis?.code?.let { code ->
                 val refs = code.mapNotNull { c -> run.targetInventory[c.descriptor]?.let { ClassRef(target.sha256, c.descriptor, it) } }
@@ -85,6 +89,13 @@ object MigrationService {
         val run = JsonFiles.read(dir.resolve("run.json"), MigrationRun::class.java)
         requireInput(run.kind == "migration-run" && run.toolVersion == TOOL_VERSION && run.jadxVersion == JADX_VERSION, "Unsupported migration run")
         requireInput(run.runId == run.fingerprint(), "Migration run fingerprint mismatch")
+        MigrationArtifacts.verify(run.methodArtifacts.orEmpty())
+        run.methodArtifactSource?.let { source ->
+            requireInput(run.targetBaseFile != null && Path.of(source.path) == Path.of(run.targetBaseFile.path).parent.resolve("report.json"), "Inherited artifact report is not the target base report")
+            requireInput(run.tasks.all { it.inheritedEntry != null } && run.anchorTasks.all { it.inheritedAnchor != null }, "Executed migration cannot borrow an old matching catalogue")
+            val inherited = MigrationArtifacts.fromPackage(source, run.targetBase!!.knowledgeId)
+            requireInput(inherited.map { it.kind to it.sha256 } == run.methodArtifacts.orEmpty().map { it.kind to it.sha256 }, "Inherited matching artifacts differ from target base")
+        }
         requireInput(run.sourceScan.diagnostics.isEmpty() && run.targetScan.diagnostics.isEmpty(), "Incomplete migration scan")
         requireInput(run.tasks.map { it.taskId }.distinct().size == run.tasks.size, "Duplicate migration tasks")
         requireInput(run.sourceApk.sha256 == run.knowledge.artifact.sha256 && run.knowledge.knowledgeId == KnowledgeFiles.id(run.knowledge), "Run source knowledge identity mismatch")
@@ -255,6 +266,9 @@ object MigrationService {
             provenance = "migration:${run.runId}", parentKnowledgeId = run.targetBase?.knowledgeId ?: run.knowledge.knowledgeId,
             anchors = anchors.values.toList(), migrationSourceKnowledgeId = run.knowledge.knowledgeId))
         MappingOutput.write(out.resolve("mapping.tiny"), knowledge.entries.map { AcceptedRename(it.binding.descriptor, Identities.renamedFullName(it.binding.descriptor, it.name)) })
+        val methodArtifacts = MigrationArtifacts.copy(run.methodArtifacts.orEmpty(), out).map { ref ->
+            ref.copy(path = out.toAbsolutePath().normalize().relativize(Path.of(ref.path)).toString().replace('\\', '/'))
+        }.takeIf { it.isNotEmpty() }
         val cachedEvidence = EvidenceFiles.available(dir, run.runId)
         val javaPaths = cachedEvidence.map { dir.resolve(it.javaPath) }.distinct()
         val smaliPaths = cachedEvidence.mapNotNull { it.smaliPath?.let(dir::resolve) }.distinct()
@@ -266,7 +280,8 @@ object MigrationService {
             "incompleteClasses" to cachedEvidence.count { it.incomplete })
         JsonFiles.writeNew(out.resolve("report.json"), mapOf("schemaVersion" to SCHEMA_VERSION, "kind" to "migration-report", "runId" to run.runId,
             "sourceKnowledgeId" to run.knowledge.knowledgeId, "knowledgeId" to knowledge.knowledgeId, "sourceApk" to run.sourceApk, "targetApk" to run.targetApk,
-            "reviewRevisions" to reviews.mapValues { it.value.revisionId }, "evidenceMetrics" to evidenceMetrics,
+            "reviewRevisions" to reviews.mapValues { it.value.revisionId }, "evidenceMetrics" to evidenceMetrics, "methodArtifacts" to methodArtifacts,
+            "methodArtifactSource" to run.methodArtifactSource,
             "engineBuildId" to run.engineBuildId, "rulesFile" to run.rulesFile, "ruleOverrides" to run.ruleOverrides,
             "targetBaseFile" to run.targetBaseFile, "targetBaseKnowledgeId" to run.targetBase?.knowledgeId, "anchors" to run.anchorTasks,
             "anchorOverrides" to run.anchorOverrides, "resolvedAnchors" to knowledge.anchors.size,
