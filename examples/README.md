@@ -46,9 +46,15 @@ After source publication, Migration consumes the same knowledge file. Keep `--kn
 
 `grpc-anchor-rules.json` seeds a Descriptor method/class and then the full-method-name METHOD anchor using three prepare/publish rounds. Only the initial illustrative service/RPC must be replaced with a known observation. No obfuscated class or method names are configured.
 
-`grpc-discovery-profile.json` consumes that method anchor and discovers its direct callers throughout the APK. It emits a call catalogue and class rules containing exact `{service, rpc, role}` selectors. `rpcDrafts.reviewServices` guides review only. The generated rules still match every relevant construction in the full APK, and a shared message type gets one class task with all its roles.
+`grpc-discovery-profile.json` consumes that method anchor and discovers its direct callers throughout the APK. It emits a call catalogue and class rules containing exact `{service, rpc, role}` selectors. `method.parameters.reviewServices` guides review only. The generated rules still match every relevant construction in the full APK, and a shared message type gets one class task with all its roles.
 
 After prepare, use repeated `analysis tasks --service <full-service>` options to inspect the chosen scope. Optional repeated `analysis prepare --reference-knowledge <knowledge.json>` inputs allow identity reuse from other same-APK packages after unique matching. They do not supply a review or allow a candidate to be chosen manually.
+
+## Proto field relations
+
+`proto-relations-workspace.json`, `proto-relations-seeds.json` and `proto-relations-profile.json` demonstrate the `messages.proto-relations` method. Two seed rounds establish an RPC method and its request Proto parent; numbered-field selectors then locate singular message types and repeated message element types. The example service, names and tags are fictional and must be replaced with inspected facts.
+
+Every configured target is drafted even when discovery finds no usable child. The resulting tasks remain visible as NO_MATCH, UNKNOWN or another explicit result. An optional workspace `corpus` and per-target `corpusTargetId` connect manual source annotations without passing expected owners into matching. See the [full workflow and migration guide](../docs/messages-proto-relations.md).
 
 ## Historical reference
 

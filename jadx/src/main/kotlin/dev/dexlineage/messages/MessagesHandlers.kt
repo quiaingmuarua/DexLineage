@@ -57,7 +57,7 @@ internal object MessagesHandlers {
             val parsed = GrpcJavaRecipe.selectors(rule)
             requireInput(parsed.distinct().size == parsed.size, "Duplicate RPC selectors")
         },
-    )
+    ) + listOf(ProtoHandler("messages.proto-fields", false), ProtoHandler("messages.proto-field-type", true))
 
     private fun rpcParameters(rule: RuleRevision, withRole: Boolean) {
         HandlerInputs.only(rule, rpcLabels + setOf("service", "rpc") + if (withRole) setOf("role") else emptySet())

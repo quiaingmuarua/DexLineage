@@ -24,10 +24,10 @@ internal object AnalysisWorkspaceActions : WorkspaceActions {
         val configFile = Digests.artifact(configPath)
         val json = JsonParser.parseString(Files.readString(configPath)).asJsonObject
         requireInput(json["schemaVersion"]?.asInt == SCHEMA_VERSION, "Expected schemaVersion $SCHEMA_VERSION")
-        requireInput(json.keySet().all { it in setOf("schemaVersion", "apk", "baseKnowledge", "referenceKnowledge", "profile", "seedRules") }, "Unknown workspace configuration field")
+        requireInput(json.keySet().all { it in setOf("schemaVersion", "apk", "baseKnowledge", "referenceKnowledge", "profile", "seedRules", "corpus") }, "Unknown workspace configuration field")
         fun text(key: String): String? = json.get(key)?.takeUnless { it.isJsonNull }?.asString?.also { requireInput(it.isNotBlank(), "Empty workspace $key") }
         val config = WorkspaceConfig(apk = text("apk") ?: throw ValidationException("Workspace requires apk"),
-            profile = text("profile") ?: throw ValidationException("Workspace requires profile"), baseKnowledge = text("baseKnowledge"), seedRules = text("seedRules"),
+            profile = text("profile") ?: throw ValidationException("Workspace requires profile"), baseKnowledge = text("baseKnowledge"), seedRules = text("seedRules"), corpus = text("corpus"),
             referenceKnowledge = json.getAsJsonArray("referenceKnowledge")?.map { it.asString.also { value -> requireInput(value.isNotBlank(), "Empty identity reference path") } }.orEmpty())
         fun path(value: String) = configPath.parent.resolve(value).normalize().toAbsolutePath()
         val apk = Digests.artifact(path(config.apk))
@@ -36,11 +36,16 @@ internal object AnalysisWorkspaceActions : WorkspaceActions {
         val referenceFiles = config.referenceKnowledge.map { Digests.artifact(path(it)) }
         IdentityReferences.load(referenceFiles.map { Path.of(it.path) }, apk, base)
         val plan = AnalysisMethods.prepareConfig(methodId, configPath)
+        val corpusFile = config.corpus?.let { Digests.artifact(path(it)) }
+        val corpus = corpusFile?.let { ManualCorpusFiles.read(Path.of(it.path)) }
+        requireInput(corpus == null || corpus.apk.sha256 == apk.sha256, "Workspace corpus belongs to another APK")
+        val targetIds = AnalysisMethods.get(methodId).corpusTargetIds(plan.profile)
+        requireInput(targetIds.all { id -> corpus?.targets?.any { it.targetId == id } == true }, "Workspace method requires known targets from a supplied corpus")
         validateSeedPlan(plan, base, ResolutionEngine.buildId())
-        val files = (listOf(configFile, apk) + plan.inputArtifacts + listOfNotNull(baseFile).flatMap(::packageFiles) + referenceFiles.flatMap(::packageFiles))
+        val files = (listOf(configFile, apk) + plan.inputArtifacts + listOfNotNull(baseFile).flatMap(::packageFiles) + referenceFiles.flatMap(::packageFiles) + listOfNotNull(corpusFile, corpus?.apk, corpus?.project))
             .distinctBy { it.path }.sortedBy { it.path }
         files.forEach(Digests::verify)
-        WorkspaceInputs(configFile, config, apk, baseFile, referenceFiles, plan, files, implementationId(), ResolutionEngine.buildId())
+        WorkspaceInputs(configFile, config, apk, baseFile, referenceFiles, plan, files, implementationId(), ResolutionEngine.buildId(), corpusFile)
     }
 
     /** Validate the finite plan, without executing facts or guessing whether a rule will be unique. */
@@ -94,6 +99,7 @@ internal object AnalysisWorkspaceActions : WorkspaceActions {
             WorkspaceStageKind.DISCOVERY -> AnalysisService.discover(apk, context.root.resolve("inputs/profile.json"), attempt.resolve("discovery"), context.base())
             WorkspaceStageKind.PREPARE -> AnalysisService.prepare(apk,
                 context.resolve(context.products.getValue("discover").rulesPath!!), attempt.resolve("run"), context.base(),
+                corpusPath = context.record.inputs.corpusFile?.let { Path.of(it.path) },
                 referenceKnowledgePaths = context.record.inputs.referenceKnowledge.map { Path.of(it.path) })
             WorkspaceStageKind.PACKET -> {
                 val dir = context.runDir()
@@ -123,6 +129,7 @@ internal object AnalysisWorkspaceActions : WorkspaceActions {
             requireInput(value.baseFile == context.base()?.let(Digests::artifact), "Stage run used a different base knowledge")
             requireInput(value.identityReferences.orEmpty().map { it.file }.toSet() ==
                 (if (references) context.record.inputs.referenceKnowledge.toSet() else emptySet()), "Stage run used different identity references")
+            requireInput(value.corpusFile == if (references) context.record.inputs.corpusFile else null, "Stage run used a different manual corpus")
             return value
         }
         when (stage.kind) {

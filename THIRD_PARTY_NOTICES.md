@@ -24,4 +24,6 @@ License declarations were checked against the resolved artifacts' published POMs
 
 The Gradle 8.11.1 Wrapper is included in the source checkout under Apache-2.0. [Gradle's distribution license](licenses/gradle-LICENSE.txt) and [NOTICE](licenses/gradle-NOTICE.txt) are preserved for reference, including its third-party acknowledgments. Gradle, Android SDK, AGP and R8 are build tools downloaded separately; they are not bundled in the DexLineage CLI distribution. Android SDK components retain their SDK license terms.
 
+The public Android fixture APKs also contain `com.google.protobuf:protobuf-javalite:3.25.3` under BSD-3-Clause. Its [license](licenses/protobuf-LICENSE.txt) is included in fixture APK assets. Fixture source generation uses the Apache-2.0 Protobuf Gradle plugin 0.9.4 and BSD-3-Clause protoc 3.25.3 as build tools. These additions do not add libraries to the installed DexLineage CLI.
+
 When changing dependency versions, inspect the actual `build/install/dexlineage/lib` contents and update this inventory and accompanying texts. Test-only libraries and CI Actions are not included in the CLI runtime.

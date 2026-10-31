@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 4,
+  "apk": "source.apk",
+  "profile": "proto-relations-profile.json",
+  "seedRules": "proto-relations-seeds.json"
+}

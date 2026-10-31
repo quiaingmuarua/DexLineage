@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 4,
+  "id": "proto-relations-example",
+  "strategy": {
+    "strategyId": "messages.proto-fields",
+    "parameters": {},
+    "resultKind": "CLASS",
+    "requires": {"parent": "directory.request"}
+  },
+  "method": {
+    "methodId": "messages.proto-relations",
+    "parameters": {
+      "targets": [
+        {"key": "session-token", "fieldNumber": 1, "cardinality": "singular", "proposedName": "SessionToken"},
+        {"key": "record-identifier", "fieldNumber": 2, "cardinality": "repeated", "proposedName": "RecordIdentifier"}
+      ]
+    }
+  }
+}

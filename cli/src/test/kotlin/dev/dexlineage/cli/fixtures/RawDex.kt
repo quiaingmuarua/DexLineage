@@ -17,7 +17,8 @@ data class RawDexMethodRef(val owner: String, val name: String, val args: List<S
     val descriptor: String get() = "(${args.joinToString("")})$result"
 }
 data class RawDexInstruction(val opcode: Opcode, val offset: Int, val regs: List<Int>,
-    val literal: String?, val method: RawDexMethodRef?, val fieldOwner: String?, val fieldName: String?, val fieldType: String?)
+    val literal: String?, val method: RawDexMethodRef?, val fieldOwner: String?, val fieldName: String?, val fieldType: String?,
+    val typeReference: String? = null)
 data class RawDexMethod(val ref: RawDexMethodRef, val flags: Int, val instructions: List<RawDexInstruction>)
 data class RawDexClass(val descriptor: String, val dexEntry: String, val sourceFiles: List<String>,
     val fields: List<RawDexField>, val methods: List<RawDexMethod>, val accessFlags: Int = 0,
@@ -70,7 +71,8 @@ object RawDex {
                             instructions += RawDexInstruction(insn.opcode, insn.offset, (0 until insn.regsCount).map { insn.getReg(it) },
                                 if (insn.opcode == Opcode.CONST_STRING) insn.indexAsString else null,
                                 call?.let { RawDexMethodRef(it.parentClassType, it.name, it.argTypes.toList(), it.returnType) },
-                                field?.parentClassType, field?.name, field?.type)
+                                field?.parentClassType, field?.name, field?.type,
+                                if (insn.indexType == InsnIndexType.TYPE_REF) insn.indexAsType else null)
                         }
                         methods += RawDexMethod(RawDexMethodRef(ref.parentClassType, ref.name, ref.argTypes.toList(), ref.returnType),
                             method.accessFlags, instructions.toList())

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 4,
+  "kind": "analysis-rules",
+  "items": [],
+  "anchors": [
+    {
+      "key": "directory.rpc",
+      "strategy": {
+        "strategyId": "messages.rpc-descriptor",
+        "parameters": {"service": "example.Directory", "rpc": "ReadDirectory"},
+        "resultKind": "METHOD"
+      }
+    },
+    {
+      "key": "directory.request",
+      "strategy": {
+        "strategyId": "messages.rpc-message",
+        "parameters": {"service": "example.Directory", "rpc": "ReadDirectory", "role": "request"},
+        "resultKind": "CLASS",
+        "requires": {"descriptor": "directory.rpc"}
+      }
+    }
+  ]
+}

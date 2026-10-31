@@ -67,7 +67,7 @@ CI runs JVM checks on Ubuntu 24.04 and Windows, and the APK suite on Ubuntu 24.0
 
 ## Run and resume an analysis method
 
-An analysis method combines existing matching operations into a finite, recoverable flow. `messages.grpc` owns the observed Messages RPC shapes and topic policy; `profile` runs the existing generic discovery/template flow. JADX is the current fact-reading implementation. Neither method can bypass matching, Review or publication checks.
+An analysis method combines existing matching operations into a finite, recoverable flow. `messages.grpc` owns the observed Messages RPC shapes and topic policy; `messages.proto-relations` follows numbered fields from a verified Proto parent; `profile` runs the existing generic discovery/template flow. JADX is the current fact-reading implementation. No method can bypass matching, Review or publication checks.
 
 Copy [the gRPC workspace configuration](examples/grpc-workspace.json), [seed rules](examples/grpc-anchor-rules.json) and [discovery profile](examples/grpc-discovery-profile.json) under `.local/`, then set the APK path and observed service/RPC inputs. Alternatively use [the profile workspace configuration](examples/profile-workspace.json) with a logger profile. Relative configuration paths are resolved from the configuration file. Optional `baseKnowledge` and `referenceKnowledge` paths are explicit inputs; expected obfuscated targets are never matching inputs.
 
@@ -78,7 +78,9 @@ Copy [the gRPC workspace configuration](examples/grpc-workspace.json), [seed rul
 & $cli analysis resume --work .local\topic-work-001
 ```
 
-The Messages method declares three seed rounds; `profile` has none. The shared flow then discovers, prepares rules and writes a review packet. It stops at `WAITING_REVIEW` and returns `runPath` and `packetPath`. Read `summary.md` and `review-packet.json`, copy `review-template.json` to a separate review file, and fill the semantic judgment, rationale and limitations after reading the linked evidence. The template pre-fills proof/evidence identities but contains no automatic HIGH/ACCEPT decision.
+The gRPC method declares three seed rounds; Proto relations declares two; `profile` has none. The shared flow then discovers, prepares rules and writes a review packet. It stops at `WAITING_REVIEW` and returns `runPath` and `packetPath`. Read `summary.md` and `review-packet.json`, copy `review-template.json` to a separate review file, and fill the semantic judgment, rationale and limitations after reading the linked evidence. The template pre-fills proof/evidence identities but contains no automatic HIGH/ACCEPT decision.
+
+See [one-hop Proto relation analysis](docs/messages-proto-relations.md) for fixed field-number targets, optional workspace corpus input, explicit zero-match tasks, and migration of the resulting independent knowledge package.
 
 ```powershell
 & $cli analysis submit --run '<runPath>' --review .local\review.json

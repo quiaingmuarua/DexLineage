@@ -17,7 +17,7 @@ class MigrationServiceTest {
     private data class Fixture(val dir: Path, val run: MigrationRun)
 
     /** File protocol fixture; deliberately never claims to execute a DEX scan. */
-    private fun fixture(withOverride: Boolean = false): Fixture {
+    private fun fixture(withOverride: Boolean = false, withArtifact: Boolean = false): Fixture {
         val source = Digests.artifact(Files.writeString(temp.resolve("old-input"), "source bytes"))
         val target = Digests.artifact(Files.writeString(temp.resolve("new-input"), "target bytes"))
         val bundle = Files.createDirectory(temp.resolve("source-bundle"))
@@ -43,7 +43,11 @@ class MigrationServiceTest {
             sourceApk = source, targetApk = target, minConfidence = Confidence.HIGH,
             tasks = listOf(MigrationTask(entries[0].semanticId, entries[0], proof), MigrationTask(entries[1].semanticId, entries[1], RuleProofs.create(target.sha256, entries[1].ruleRevision!!, "fixture-engine", emptyList()))),
             sourceInventory = sourceRefs.associate { it.descriptor to it.dexEntry }, targetInventory = mapOf(ref.descriptor to ref.dexEntry),
-            sourceScan = MigrationFixtures.stats, targetScan = MigrationFixtures.stats, analysisDiagnostics = emptyList(), analysisMillis = 0, createdAt = "fixture", engineBuildId = "fixture-engine", rulesFile = rulesFile, ruleOverrides = replacement)
+            sourceScan = MigrationFixtures.stats, targetScan = MigrationFixtures.stats, analysisDiagnostics = emptyList(), analysisMillis = 0, createdAt = "fixture", engineBuildId = "fixture-engine", rulesFile = rulesFile, ruleOverrides = replacement,
+            methodArtifacts = if (withArtifact) listOf(temp.resolve("opaque-catalog.json").let { path ->
+                JsonFiles.writeNew(path, mapOf("schemaVersion" to 4, "description" to "Opaque scenario diagnostics"))
+                ScenarioArtifactRef("fixture.catalogue", path.toAbsolutePath().toString(), Digests.file(path))
+            }) else null)
         run = run.copy(runId = run.fingerprint())
         val dir = Files.createDirectory(temp.resolve("run"))
         JsonFiles.writeNew(dir.resolve("run.json"), run)
@@ -56,6 +60,23 @@ class MigrationServiceTest {
         val path = temp.resolve(name)
         JsonFiles.writeNew(path, batch)
         return MigrationService.submit(f.dir, path)
+    }
+
+    @Test fun `matching artifacts are digest bound and remain consumable after moving publication`() {
+        val f = fixture(withArtifact = true)
+        val original = f.run.methodArtifacts!!.single()
+        MigrationService.readRun(f.dir)
+        val out = temp.resolve("published-artifacts")
+        MigrationService.publish(f.dir, out)
+        val moved = temp.resolve("relocated-publication"); Files.move(out, moved)
+        val report = com.google.gson.JsonParser.parseString(Files.readString(moved.resolve("report.json"))).asJsonObject
+        val ref = JsonFiles.gson.fromJson(report.getAsJsonArray("methodArtifacts").single(), ScenarioArtifactRef::class.java)
+        assertFalse(Path.of(ref.path).isAbsolute)
+        assertEquals(original.kind, ref.kind)
+        assertEquals(original.sha256, Digests.file(moved.resolve(ref.path)))
+        Files.writeString(Path.of(original.path), "changed diagnostics")
+        assertFailsWith<ValidationException> { MigrationService.readRun(f.dir) }
+        assertEquals(original.sha256, Digests.file(moved.resolve(ref.path)), "Published package must not depend on the old artifact path")
     }
     @Test fun `review resubmission revision recovery and incremental publish preserve knowledge`() {
         val f = fixture()

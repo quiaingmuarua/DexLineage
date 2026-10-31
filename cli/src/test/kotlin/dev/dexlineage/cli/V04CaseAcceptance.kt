@@ -24,6 +24,7 @@ object V04CaseAcceptance {
     private data class Manifest(
         val schemaVersion: Int = SCHEMA_VERSION,
         val corpus: String = "",
+        val analysisSeeds: List<RoundPath> = emptyList(),
         val analysisRounds: List<RoundPath> = emptyList(),
         val migrationRounds: List<RoundPath> = emptyList(),
         val shapeRounds: List<RoundPath> = emptyList(),
@@ -199,6 +200,7 @@ object V04CaseAcceptance {
             return CheckedRound(run.runId, run.apk, publication, knowledge)
         }
 
+        manifest.analysisSeeds.forEachIndexed { index, location -> analysisRound(location, "analysis-seed-${index + 1}", false) }
         val sourceRounds = manifest.analysisRounds.mapIndexed { index, location -> analysisRound(location, "analysis-${index + 1}", true) }
         val source = sourceRounds.last()
         assertTrue(source.knowledge.entries.isNotEmpty(), "Source acceptance cannot be an empty Mapping")
