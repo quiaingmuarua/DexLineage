@@ -1,5 +1,14 @@
 # DexLineage
 
+> **Maintenance has moved to [DroidLab](https://github.com/quiaingmuarua/DroidLab).**
+> DexLineage continues as the [`dexlineage/` component](https://github.com/quiaingmuarua/DroidLab/tree/main/dexlineage).
+> Use its [current guide](https://github.com/quiaingmuarua/DroidLab/blob/main/dexlineage/README.md)
+> for builds and usage, and submit new development and issues to DroidLab.
+>
+> This standalone repository is retained as a historical source snapshot.
+> All build, CLI and regression instructions below describe standalone version 0.4;
+> they are not the instructions for the current DroidLab checkout.
+
 DexLineage is a reusable APK analysis project. Version 0.4 provides two scenes:
 
 - **Analysis:** import manual annotations or discover clues, combine built-in matching with compiled application strategies, resolve supporting anchors over immutable rounds, then review and publish class names.
